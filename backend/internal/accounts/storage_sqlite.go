@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	_ "modernc.org/sqlite"
+	"chatgpt2api/internal/sqliteutil"
 )
 
 type sqliteAccountStorage struct {
@@ -17,7 +17,7 @@ type sqliteAccountStorage struct {
 }
 
 func newSQLiteAccountStorage(path string) (accountStorageBackend, error) {
-	db, err := sql.Open("sqlite", path)
+	db, err := sqliteutil.Open(path)
 	if err != nil {
 		return nil, err
 	}

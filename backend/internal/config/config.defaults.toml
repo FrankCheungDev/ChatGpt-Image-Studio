@@ -69,8 +69,8 @@ redis_password = ""
 redis_db = 0
 redis_prefix = "chatgpt2api:studio"
 
-# CLIProxyAPI / CPA 同步配置。
-# 如果你暂时不需要远端号池同步，请保持 enabled=false。
+# 旧 CLIProxyAPI / CPA 账号同步配置，仅保留兼容。
+# CPA 图片模式不需要同步账号；请保持 enabled=false。
 [sync]
 enabled = false
 base_url = ""
@@ -81,7 +81,7 @@ provider_type = "codex"
 
 # 固定代理配置。用于访问 ChatGPT 官方接口。
 # 当前仅支持 fixed 模式，url 支持 socks5 / socks5h / http / https。
-# 如果 sync_enabled = true，CPA 同步请求也会复用同一代理。
+# 如果 sync_enabled = true，旧同步请求也会复用同一代理。
 [proxy]
 enabled = false
 url = "socks5h://127.0.0.1:10808"
@@ -90,7 +90,7 @@ sync_enabled = false
 
 # CPA 图片接口配置。
 # 当 image_mode = "cpa" 时会使用这里的 base_url / api_key。
-# 如果 cpa.base_url 为空，会回退复用 sync.base_url。
+# 如果 cpa.base_url 为空，会兼容回退复用旧 sync.base_url。
 [cpa]
 base_url = ""
 api_key = ""

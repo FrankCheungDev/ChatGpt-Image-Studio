@@ -21,6 +21,7 @@ import (
 	"chatgpt2api/internal/cliproxy"
 	"chatgpt2api/internal/config"
 	"chatgpt2api/internal/configstore"
+	"chatgpt2api/internal/users"
 )
 
 func main() {
@@ -75,6 +76,22 @@ func main() {
 	if err != nil {
 		fatalStartup(logger, paths, "初始化账号存储失败", err)
 	}
+	defer store.Close()
+
+	userStore, err := users.NewStore(cfg.ResolvePath(cfg.Storage.SQLitePath))
+	if err != nil {
+		fatalStartup(logger, paths, "初始化用户存储失败", err)
+	}
+	defer userStore.Close()
+	adminUsername := envString("ADMIN_USERNAME", "admin")
+	adminPassword := envString("ADMIN_PASSWORD", cfg.App.AuthKey)
+	adminUser, adminCreated, err := userStore.EnsureBootstrapAdmin(adminUsername, adminPassword)
+	if err != nil {
+		fatalStartup(logger, paths, "初始化管理员账号失败", err)
+	}
+	if adminCreated {
+		logger.Info("bootstrap admin user created", slog.String("username", adminUser.Username))
+	}
 
 	syncTimeout := time.Duration(max(10, cfg.Sync.RequestTimeout)) * time.Second
 	syncClient := cliproxy.New(cfg.Sync.Enabled, cfg.Sync.BaseURL, cfg.Sync.ManagementKey, cfg.Sync.ProviderType, syncTimeout, cfg.SyncProxyURL())
@@ -85,7 +102,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              addr,
-		Handler:           api.SetupRouter(cfg, store, syncClient),
+		Handler:           api.SetupRouterWithUsers(cfg, store, syncClient, userStore),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

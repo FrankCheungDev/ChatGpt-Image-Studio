@@ -18,12 +18,15 @@ func (s *Server) handleProxyTest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	proxyURL := firstNonEmpty(body.URL, s.cfg.Proxy.URL)
+	redactProxyError := func(value string) string {
+		return redactInputSensitiveText(s.redactSensitiveText(value), proxyURL)
+	}
 	if err := outboundproxy.Validate(proxyURL); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{
 			"ok":      false,
 			"status":  0,
 			"latency": 0,
-			"error":   err.Error(),
+			"error":   redactProxyError(err.Error()),
 		})
 		return
 	}
@@ -34,7 +37,7 @@ func (s *Server) handleProxyTest(w http.ResponseWriter, r *http.Request) {
 			"ok":      false,
 			"status":  0,
 			"latency": 0,
-			"error":   err.Error(),
+			"error":   redactProxyError(err.Error()),
 		})
 		return
 	}
@@ -42,7 +45,7 @@ func (s *Server) handleProxyTest(w http.ResponseWriter, r *http.Request) {
 	client := &http.Client{Timeout: 15 * time.Second, Transport: transport}
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, "https://chatgpt.com/api/auth/csrf", nil)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": redactProxyError(err.Error())})
 		return
 	}
 	req.Header.Set("User-Agent", "chatgpt2api-studio proxy test")
@@ -55,7 +58,7 @@ func (s *Server) handleProxyTest(w http.ResponseWriter, r *http.Request) {
 			"ok":      false,
 			"status":  0,
 			"latency": latency,
-			"error":   err.Error(),
+			"error":   redactProxyError(err.Error()),
 		})
 		return
 	}

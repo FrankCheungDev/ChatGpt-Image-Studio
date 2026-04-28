@@ -28,8 +28,8 @@ if (Test-Path ".git") {
   Write-Host "[2/4] Git metadata not found, skipping repository pull."
 }
 
-Write-Host "[3/4] Pulling latest Docker image from GitHub Container Registry..."
-docker compose pull studio
+Write-Host "[3/4] Building Docker image from local code..."
+docker compose build studio
 
 Write-Host "[4/4] Recreating container..."
 docker compose up -d --remove-orphans studio

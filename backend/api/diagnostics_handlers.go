@@ -95,8 +95,8 @@ func (s *Server) handleExportDiagnostics(w http.ResponseWriter, r *http.Request)
 		},
 		StartupCheck: s.runStartupCheck(r.Context()),
 		Runtime:      s.collectRuntimeStatus(),
-		Config:       s.maskSensitiveConfig(s.buildConfigPayload()),
-		RequestLogs:  s.reqLogs.list(100),
+		Config:       redactConfigPayload(s.buildConfigPayload()),
+		RequestLogs:  s.redactRequestLogs(s.reqLogs.list(100)),
 	})
 }
 
@@ -138,7 +138,7 @@ func (s *Server) collectRuntimeStatus() runtimeStatusResponse {
 			continue
 		}
 		if out.Recent.LastError == "" {
-			out.Recent.LastError = item.Error
+			out.Recent.LastError = s.redactSensitiveText(item.Error)
 			out.Recent.LastErrorCode = item.ErrorCode
 			out.Recent.LastErrorAt = item.FinishedAt
 			out.Recent.LastErrorAccount = firstNonEmpty(item.AccountEmail, item.AccountFile)
@@ -182,18 +182,18 @@ func (s *Server) runStartupCheck(ctx context.Context) startupCheckResponse {
 			return checkStatusWarn, "未启用代理", "如需走代理访问官方链路，请先启用并填写 proxy.url"
 		}
 		if err := outboundproxy.Validate(s.cfg.Proxy.URL); err != nil {
-			return checkStatusFail, fmt.Sprintf("代理配置无效：%v", err), "请检查代理 URL、协议与端口"
+			return checkStatusFail, "代理配置无效", "请检查代理 URL、协议与端口"
 		}
 		target, err := resolveProxyDialTarget(s.cfg.Proxy.URL)
 		if err != nil {
-			return checkStatusFail, fmt.Sprintf("代理地址解析失败：%v", err), ""
+			return checkStatusFail, "代理地址解析失败", ""
 		}
 		conn, dialErr := net.DialTimeout("tcp", target, 3*time.Second)
 		if dialErr != nil {
-			return checkStatusFail, fmt.Sprintf("代理不可达：%v", dialErr), "请确认代理程序已启动且端口正确"
+			return checkStatusFail, "代理不可达", "请确认代理程序已启动且端口正确"
 		}
 		_ = conn.Close()
-		return checkStatusPass, fmt.Sprintf("代理可连接：%s", target), ""
+		return checkStatusPass, "代理可连接", ""
 	})
 
 	addCheck("chatgpt", "官方站点连通", func() (string, string, string) {
@@ -202,7 +202,7 @@ func (s *Server) runStartupCheck(ctx context.Context) startupCheckResponse {
 		}
 		statusCode, err := probeEndpoint(ctx, "https://chatgpt.com", s.cfg.ChatGPTProxyURL(), 8*time.Second)
 		if err != nil {
-			return checkStatusFail, fmt.Sprintf("访问 chatgpt.com 失败：%v", err), "请检查代理、网络或防火墙设置"
+			return checkStatusFail, "访问 chatgpt.com 失败", "请检查代理、网络或防火墙设置"
 		}
 		return checkStatusPass, fmt.Sprintf("chatgpt.com 可达，HTTP %d", statusCode), ""
 	})
@@ -219,9 +219,9 @@ func (s *Server) runStartupCheck(ctx context.Context) startupCheckResponse {
 		statusCode, err := probeEndpoint(ctx, normalized, "", 5*time.Second)
 		if err != nil {
 			if result.Mode == "cpa" {
-				return checkStatusFail, fmt.Sprintf("CPA 服务不可达：%v", err), ""
+				return checkStatusFail, "CPA 服务不可达", ""
 			}
-			return checkStatusWarn, fmt.Sprintf("CPA 服务不可达：%v", err), ""
+			return checkStatusWarn, "CPA 服务不可达", ""
 		}
 		return checkStatusPass, fmt.Sprintf("CPA 服务可达，HTTP %d", statusCode), ""
 	})

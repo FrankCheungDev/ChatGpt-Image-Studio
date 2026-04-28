@@ -115,7 +115,7 @@ type configSaveTarget struct {
 }
 
 func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.buildConfigPayload())
+	writeJSON(w, http.StatusOK, redactConfigPayload(s.buildConfigPayload()))
 }
 
 func (s *Server) handleGetDefaultConfig(w http.ResponseWriter, r *http.Request) {
@@ -124,7 +124,7 @@ func (s *Server) handleGetDefaultConfig(w http.ResponseWriter, r *http.Request) 
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, s.buildConfigPayloadFromConfig(defaultCfg))
+	writeJSON(w, http.StatusOK, redactConfigPayload(s.buildConfigPayloadFromConfig(defaultCfg)))
 }
 
 func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
@@ -246,13 +246,13 @@ func (s *Server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status": "saved",
-		"config": s.buildConfigPayload(),
+		"config": redactConfigPayload(s.buildConfigPayload()),
 	})
 }
 
 func (s *Server) handleListRequestLogs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"items": s.reqLogs.list(100),
+		"items": s.redactRequestLogs(s.reqLogs.list(100)),
 	})
 }
 
@@ -342,6 +342,29 @@ func (s *Server) buildConfigPayloadFromConfig(cfg *config.Config) configPayload 
 
 	payload.Log.LogAllRequests = cfg.Log.LogAllRequests
 	payload.Paths = s.cfg.Paths()
+	return payload
+}
+
+func redactConfigPayload(payload configPayload) configPayload {
+	payload.App.APIKey = ""
+	payload.App.AuthKey = ""
+	payload.Storage.RedisAddr = ""
+	payload.Storage.RedisPassword = ""
+	payload.Sync.BaseURL = ""
+	payload.Sync.ManagementKey = ""
+	payload.Proxy.URL = ""
+	payload.CPA.BaseURL = ""
+	payload.CPA.APIKey = ""
+	payload.NewAPI.BaseURL = ""
+	payload.NewAPI.Username = ""
+	payload.NewAPI.Password = ""
+	payload.NewAPI.AccessToken = ""
+	payload.NewAPI.SessionCookie = ""
+	payload.Sub2API.BaseURL = ""
+	payload.Sub2API.Email = ""
+	payload.Sub2API.Password = ""
+	payload.Sub2API.APIKey = ""
+	payload.Sub2API.GroupID = ""
 	return payload
 }
 

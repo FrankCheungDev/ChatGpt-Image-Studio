@@ -93,23 +93,26 @@ func (s *Server) handleIntegrationTest(w http.ResponseWriter, r *http.Request) {
 	case "newapi":
 		result, err := s.testNewAPIConnection(r, body.NewAPI)
 		if err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": s.redactSensitiveText(err.Error())})
 			return
 		}
+		result.Message = redactInputSensitiveText(s.redactSensitiveText(result.Message), body.NewAPI.BaseURL, body.NewAPI.Username, body.NewAPI.Password, body.NewAPI.AccessToken, body.NewAPI.SessionCookie)
 		writeJSON(w, http.StatusOK, result)
 	case "sub2api":
 		result, err := s.testSub2APIConnection(r, body.Sub2API)
 		if err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": s.redactSensitiveText(err.Error())})
 			return
 		}
+		result.Message = redactInputSensitiveText(s.redactSensitiveText(result.Message), body.Sub2API.BaseURL, body.Sub2API.Email, body.Sub2API.Password, body.Sub2API.APIKey, body.Sub2API.GroupID)
 		writeJSON(w, http.StatusOK, result)
 	default:
 		result, err := s.testCPAConnection(r, body.CPA)
 		if err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": s.redactSensitiveText(err.Error())})
 			return
 		}
+		result.Message = redactInputSensitiveText(result.Message, body.CPA.BaseURL, body.CPA.APIKey)
 		writeJSON(w, http.StatusOK, result)
 	}
 }
@@ -134,18 +137,17 @@ func (s *Server) handleNewAPITokenDiscover(w http.ResponseWriter, r *http.Reques
 		probeTimeout(body.NewAPI.RequestTimeout),
 		s.cfg.SyncProxyURL(),
 	)
-	token, userID, err := client.GenerateAccessToken(r.Context())
+	_, userID, err := client.GenerateAccessToken(r.Context())
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": redactInputSensitiveText(s.redactSensitiveText(err.Error()), body.NewAPI.BaseURL, body.NewAPI.Username, body.NewAPI.Password, body.NewAPI.AccessToken, body.NewAPI.SessionCookie)})
 		return
 	}
 
 	writeJSON(w, http.StatusOK, newAPITokenDiscoverResponse{
-		OK:          true,
-		Message:     "已生成并回填 NewAPI Access Token。再次点击会让远端生成一个新的 token。",
-		Latency:     time.Since(startedAt).Milliseconds(),
-		AccessToken: token,
-		UserID:      userID,
+		OK:      true,
+		Message: "已生成 NewAPI Access Token；出于安全原因不会在接口响应中返回 token。",
+		Latency: time.Since(startedAt).Milliseconds(),
+		UserID:  userID,
 	})
 }
 
@@ -170,7 +172,7 @@ func (s *Server) handleSub2APIGroups(w http.ResponseWriter, r *http.Request) {
 	)
 	groups, err := client.ListGroups(r.Context())
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": redactInputSensitiveText(s.redactSensitiveText(err.Error()), body.Sub2API.BaseURL, body.Sub2API.Email, body.Sub2API.Password, body.Sub2API.APIKey, body.Sub2API.GroupID)})
 		return
 	}
 	sort.Slice(groups, func(i, j int) bool {
@@ -230,7 +232,7 @@ func (s *Server) testCPAConnection(r *http.Request, cfg integrationCPAConfig) (*
 		return &integrationTestResponse{
 			OK:      false,
 			Source:  "cpa",
-			Message: err.Error(),
+			Message: redactInputSensitiveText(err.Error(), cfg.BaseURL, cfg.APIKey),
 			Status:  0,
 			Latency: latency,
 		}, nil
@@ -274,7 +276,7 @@ func (s *Server) testNewAPIConnection(r *http.Request, cfg integrationNewAPIConf
 		return &integrationTestResponse{
 			OK:      false,
 			Source:  "newapi",
-			Message: err.Error(),
+			Message: redactInputSensitiveText(err.Error(), cfg.BaseURL, cfg.Username, cfg.Password, cfg.AccessToken, cfg.SessionCookie),
 			Status:  0,
 			Latency: latency,
 		}, nil
@@ -313,7 +315,7 @@ func (s *Server) testSub2APIConnection(r *http.Request, cfg integrationSub2APICo
 		return &integrationTestResponse{
 			OK:      false,
 			Source:  "sub2api",
-			Message: err.Error(),
+			Message: redactInputSensitiveText(err.Error(), cfg.BaseURL, cfg.Email, cfg.Password, cfg.APIKey, cfg.GroupID),
 			Status:  0,
 			Latency: latency,
 		}, nil

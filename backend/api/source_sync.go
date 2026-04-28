@@ -107,6 +107,16 @@ func (s *Server) buildSourceSyncStatus(ctx context.Context, source string) (*sou
 
 func buildSourceSyncProgressStatus(source string, run *sourceSyncRunResult) *sourceSyncStatus {
 	normalized := normalizeSyncSource(source)
+	if normalized == "cpa" {
+		return &sourceSyncStatus{
+			Source:        normalized,
+			Label:         syncSourceLabel(normalized),
+			PullSupported: false,
+			PushSupported: false,
+			LastRun:       run,
+			Notes:         cpaDirectSyncNotes(),
+		}
+	}
 	return &sourceSyncStatus{
 		Source:        normalized,
 		Label:         syncSourceLabel(normalized),
@@ -160,75 +170,39 @@ func normalizeSyncDirection(direction string) string {
 }
 
 func (s *Server) buildCPAStatus(ctx context.Context) (*sourceSyncStatus, error) {
-	store := s.getStore()
-	summary, err := store.SyncStatus(ctx, s.getSyncClient())
-	if err != nil {
-		return nil, err
-	}
-
+	_ = ctx
 	status := &sourceSyncStatus{
-		Source:             "cpa",
-		Label:              "CPA",
-		Configured:         summary.Configured,
-		PullSupported:      true,
-		PushSupported:      true,
-		Local:              summary.Local,
-		Remote:             summary.Remote,
-		PendingPush:        summary.Summary["pending_upload"] + summary.Summary["remote_deleted"],
-		PendingPull:        summary.Summary["remote_only"],
-		InaccessibleRemote: 0,
-		Notes:              []string{},
-	}
-	if summary.DisabledMismatch > 0 {
-		status.Notes = append(status.Notes, fmt.Sprintf("有 %d 个账号的禁用状态与远端不一致。", summary.DisabledMismatch))
-	}
-	if summary.LastRun != nil {
-		status.LastRun = &sourceSyncRunResult{
-			OK:         summary.LastRun.OK,
-			Running:    summary.LastRun.Running,
-			Source:     "cpa",
-			Direction:  summary.LastRun.Direction,
-			Imported:   summary.LastRun.Downloaded,
-			Exported:   summary.LastRun.Uploaded,
-			Failed:     summary.LastRun.DownloadFailed + summary.LastRun.UploadFailed + summary.LastRun.DisabledAlignFailed,
-			Total:      summary.LastRun.Total,
-			Processed:  summary.LastRun.Processed,
-			Phase:      summary.LastRun.Phase,
-			Current:    summary.LastRun.Current,
-			Skipped:    0,
-			StartedAt:  summary.LastRun.StartedAt,
-			FinishedAt: summary.LastRun.FinishedAt,
-			UpdatedAt:  summary.LastRun.UpdatedAt,
-		}
+		Source:        "cpa",
+		Label:         "CPA",
+		Configured:    s.cfg.CPAImageConfigured(),
+		PullSupported: false,
+		PushSupported: false,
+		Notes:         cpaDirectSyncNotes(),
+		LastRun:       s.getSourceSyncRun("cpa"),
 	}
 	return status, nil
 }
 
 func (s *Server) runCPASync(ctx context.Context, direction string) (*sourceSyncRunResult, error) {
-	store := s.getStore()
+	_ = ctx
 	startedAt := time.Now().UTC().Format(time.RFC3339)
-	result, err := store.RunSync(ctx, s.getSyncClient(), direction)
-	if err != nil {
-		return nil, err
-	}
+	finishedAt := time.Now().UTC().Format(time.RFC3339)
 	run := &sourceSyncRunResult{
-		OK:         result.OK,
-		Running:    result.Running,
+		OK:         true,
+		Running:    false,
 		Source:     "cpa",
-		Direction:  result.Direction,
-		Imported:   result.Downloaded,
-		Exported:   result.Uploaded,
-		Failed:     result.DownloadFailed + result.UploadFailed + result.DisabledAlignFailed,
-		Total:      result.Total,
-		Processed:  result.Processed,
-		Phase:      result.Phase,
-		Current:    result.Current,
-		StartedAt:  firstNonEmpty(result.StartedAt, startedAt),
-		FinishedAt: result.FinishedAt,
-		UpdatedAt:  result.UpdatedAt,
+		Direction:  normalizeSyncDirection(direction),
+		Notes:      cpaDirectSyncNotes(),
+		StartedAt:  startedAt,
+		FinishedAt: finishedAt,
+		UpdatedAt:  finishedAt,
 	}
 	s.setSourceSyncRun("cpa", run)
 	return run, nil
+}
+
+func cpaDirectSyncNotes() []string {
+	return []string{"CPA 图片请求已改为直连接口，本地不再同步或管理 CPA 账号。"}
 }
 
 func (s *Server) buildSub2APIStatus(ctx context.Context) (*sourceSyncStatus, error) {

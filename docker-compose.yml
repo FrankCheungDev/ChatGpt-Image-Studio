@@ -1,6 +1,6 @@
 services:
   studio:
-    image: ghcr.io/peiyizhi0724/chatgpt-image-studio:${IMAGE_TAG:-latest}
+    image: chatgpt-image-studio:${IMAGE_TAG:-local}
     build:
       context: .
       dockerfile: Dockerfile
@@ -9,10 +9,12 @@ services:
         COMMIT: ${IMAGE_COMMIT:-local}
         BUILD_TIME: ${IMAGE_BUILD_TIME:-local}
     ports:
-      - "7000:7000"
+      - "${HOST_PORT:-7000}:7000"
     environment:
       SERVER_HOST: 0.0.0.0
       SERVER_PORT: 7000
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-chatgpt2api}
       TZ: ${TZ:-Asia/Shanghai}
     volumes:
       - ./backend/data:/app/data

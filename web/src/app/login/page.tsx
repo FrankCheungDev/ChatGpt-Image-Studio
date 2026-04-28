@@ -8,24 +8,25 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { login } from "@/lib/api";
-import { setStoredAuthKey } from "@/store/auth";
+import { setStoredUser } from "@/store/auth";
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const [authKey, setAuthKey] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleLogin = async () => {
-    const normalizedAuthKey = authKey.trim();
-    if (!normalizedAuthKey) {
-      toast.error("请输入 密钥");
+    const normalizedUsername = username.trim();
+    if (!normalizedUsername || !password) {
+      toast.error("请输入用户名和密码");
       return;
     }
 
     setIsSubmitting(true);
     try {
-      await login(normalizedAuthKey);
-      await setStoredAuthKey(normalizedAuthKey);
+      const payload = await login(normalizedUsername, password);
+      await setStoredUser(payload.user);
       navigate("/image", { replace: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : "登录失败";
@@ -86,26 +87,47 @@ export default function LoginPage() {
               <div className="space-y-2">
                 <h1 className="text-3xl font-semibold tracking-tight text-stone-950">登录工作区</h1>
                 <p className="text-sm leading-7 text-stone-500">
-                  输入后端密钥，进入图片工作台与账号管理界面。
+                  输入用户名和密码，进入图片工作台。
                 </p>
               </div>
             </div>
 
             <div className="space-y-3">
-              <label htmlFor="auth-key" className="block text-sm font-medium text-stone-700">
-                密钥
+              <label htmlFor="username" className="block text-sm font-medium text-stone-700">
+                用户名
               </label>
               <Input
-                id="auth-key"
-                type="password"
-                value={authKey}
-                onChange={(event) => setAuthKey(event.target.value)}
+                id="username"
+                type="text"
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
                     void handleLogin();
                   }
                 }}
-                placeholder="请输入密钥"
+                placeholder="请输入用户名"
+                autoComplete="username"
+                className="h-13 rounded-2xl border-stone-200 bg-stone-50 px-4 shadow-none focus-visible:ring-1"
+              />
+            </div>
+
+            <div className="space-y-3">
+              <label htmlFor="password" className="block text-sm font-medium text-stone-700">
+                密码
+              </label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    void handleLogin();
+                  }
+                }}
+                placeholder="请输入密码"
+                autoComplete="current-password"
                 className="h-13 rounded-2xl border-stone-200 bg-stone-50 px-4 shadow-none focus-visible:ring-1"
               />
             </div>
@@ -120,7 +142,7 @@ export default function LoginPage() {
             </Button>
 
             <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4 text-xs leading-6 text-stone-500">
-              使用同一个密钥即可访问图片生成接口和后台管理页，不需要额外登录步骤。
+              普通用户仅可使用图片工作台；管理员登录后可管理用户并查看平台历史。
             </div>
 
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-6 text-amber-950">

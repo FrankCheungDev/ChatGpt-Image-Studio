@@ -24,8 +24,8 @@ else
   echo "[2/4] Git metadata not found, skipping repository pull."
 fi
 
-echo "[3/4] Pulling latest Docker image from GitHub Container Registry..."
-docker compose pull studio
+echo "[3/4] Building Docker image from local code..."
+docker compose build studio
 
 echo "[4/4] Recreating container..."
 docker compose up -d --remove-orphans studio

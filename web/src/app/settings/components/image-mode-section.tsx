@@ -425,7 +425,7 @@ export function ImageModeSection({
 
       <ConfigSection
         title="CPA 配置"
-        description="图片请求读取 [cpa].base_url / [cpa].api_key；CPA 管理同步读取 [sync].base_url / [sync].management_key。若 [cpa].base_url 留空，会自动回退使用 [sync].base_url。"
+        description="图片请求直接读取 [cpa].base_url / [cpa].api_key；CPA 账号同步已停用，本地不再拉取或推送 CPA 账号。若 [cpa].base_url 留空，会兼容回退使用 [sync].base_url。"
         actions={
           <Button
             type="button"
@@ -473,8 +473,8 @@ export function ImageModeSection({
           />
         </Field>
         <Field
-          label="CPA 管理 Key 状态"
-          hint="对应 [sync].management_key，仅用于账号同步管理接口，不参与图片生成请求。"
+          label="旧 CPA 管理 Key 状态"
+          hint="对应 [sync].management_key，仅保留旧配置兼容；当前图片生成和 CPA 直连不再使用它。"
           tooltip={
             <TooltipDetails
               items={[
@@ -484,11 +484,11 @@ export function ImageModeSection({
                 },
                 {
                   title: "用于哪里",
-                  body: <>只用于账号同步管理接口，不用于图片生成、不等于 CPA 图片 API Key。</>,
+                  body: <>旧版账号同步管理接口曾使用该 Key；当前 CPA 图片请求只使用 CPA 图片 API Key。</>,
                 },
                 {
                   title: "排查",
-                  body: <>如果这里未配置，账号管理页的同步状态和推拉同步通常会报 401 或未配置。</>,
+                  body: <>CPA 直连模式不需要配置该项，未配置不会影响图片生成。</>,
                 },
               ]}
             />
@@ -521,7 +521,7 @@ export function ImageModeSection({
                 },
                 {
                   title: "留空效果",
-                  body: <>留空后会自动复用下面的 CPA 管理 Base URL。</>,
+                  body: <>留空后会兼容复用下面的旧 CPA 管理 Base URL；新部署建议直接填写 CPA 图片 Base URL。</>,
                 },
               ]}
             />
@@ -645,8 +645,8 @@ export function ImageModeSection({
           </Select>
         </Field>
         <Field
-          label="CPA 管理 Base URL"
-          hint="对应 [sync].base_url，用于账号同步管理接口，与上面的 CPA 图片地址可相同也可不同。"
+          label="旧 CPA 管理 Base URL"
+          hint="对应 [sync].base_url，仅保留旧配置兼容；当前 CPA 直连不需要账号同步管理接口。"
           tooltip={
             <TooltipDetails
               items={[
@@ -660,11 +660,11 @@ export function ImageModeSection({
                 },
                 {
                   title: "用途",
-                  body: <>账号管理页的同步状态、从 CPA 同步、同步至 CPA 都会使用这里。</>,
+                  body: <>CPA 账号同步已经停用；这里只用于兼容旧配置或作为 CPA 图片地址的回退值。</>,
                 },
                 {
                   title: "注意",
-                  body: <>这里是管理接口地址，不等于上面的图片 API Key 鉴权地址。</>,
+                  body: <>新部署建议优先填写上面的 CPA 图片 Base URL，避免依赖旧回退逻辑。</>,
                 },
               ]}
             />
@@ -677,22 +677,22 @@ export function ImageModeSection({
           />
         </Field>
         <Field
-          label="CPA 管理 Key"
-          hint="对应 [sync].management_key，只用于 CPA 管理接口同步，不用于图片生成。"
+          label="旧 CPA 管理 Key"
+          hint="对应 [sync].management_key，CPA 直连模式不再需要它。"
           tooltip={
             <TooltipDetails
               items={[
                 {
                   title: "来源",
-                  body: <>填 CPA 服务端用于管理接口的 Key，不是图片 API Key，也不是账号 access token。</>,
+                  body: <>旧版 CPA 服务端管理接口使用的 Key，不是图片 API Key，也不是账号 access token。</>,
                 },
                 {
                   title: "错误现象",
-                  body: <>填错时，账号管理页通常会看到 `invalid management key` 或 401。</>,
+                  body: <>当前 CPA 直连不会调用账号同步管理接口，因此该项填错也不影响图片生成。</>,
                 },
                 {
                   title: "用途",
-                  body: <>只影响号池同步、状态拉取和远端管理，不影响图片生成链路。</>,
+                  body: <>仅保留旧配置兼容，不参与当前图片生成链路。</>,
                 },
               ]}
             />
@@ -706,14 +706,14 @@ export function ImageModeSection({
           />
         </Field>
         <Field
-          label="同步请求超时（秒）"
-          hint="对应 [sync].request_timeout，本地和 CPA 管理端同步时使用。"
+          label="旧同步请求超时（秒）"
+          hint="对应 [sync].request_timeout，仅保留旧同步配置兼容。"
           tooltip={
             <TooltipDetails
               items={[
                 {
                   title: "作用",
-                  body: <>只影响同步管理接口，不影响图片生成链路。</>,
+                  body: <>不影响当前 CPA 图片生成链路。</>,
                 },
                 {
                   title: "建议值",
@@ -736,14 +736,14 @@ export function ImageModeSection({
           />
         </Field>
         <Field
-          label="同步并发"
-          hint="对应 [sync].concurrency，批量同步时最多同时处理多少个文件。"
+          label="旧同步并发"
+          hint="对应 [sync].concurrency，仅保留旧同步配置兼容。"
           tooltip={
             <TooltipDetails
               items={[
                 {
                   title: "作用",
-                  body: <>控制同步时同时上传 / 下载多少个认证文件。</>,
+                  body: <>旧版账号同步使用该项；当前 CPA 直连不会上传或下载认证文件。</>,
                 },
                 {
                   title: "建议值",
@@ -770,8 +770,8 @@ export function ImageModeSection({
           />
         </Field>
         <Field
-          label="同步 Provider 类型"
-          hint="对应 [sync].provider_type，用于筛选同步到远端的认证类型。通常保持 codex。"
+          label="旧同步 Provider 类型"
+          hint="对应 [sync].provider_type，仅保留旧同步配置兼容。"
           tooltip={
             <TooltipDetails
               items={[
@@ -785,7 +785,7 @@ export function ImageModeSection({
                 },
                 {
                   title: "作用",
-                  body: <>同步时只处理匹配这个 provider 的认证文件，避免不同类型账号混进同一套同步池。</>,
+                  body: <>旧版账号同步使用该项；当前 CPA 直连不会读取本地认证文件。</>,
                 },
               ]}
             />
@@ -798,22 +798,22 @@ export function ImageModeSection({
           />
         </Field>
         <ToggleField
-          label="启用 CPA 同步"
-          hint="开启后才允许账号管理页执行本地号池与 CPA 之间的双向同步。"
+          label="启用旧 CPA 同步"
+          hint="仅保留旧版本兼容；当前 CPA 图片直连不会读取或同步 CPA 账号。"
           tooltip={
             <TooltipDetails
               items={[
                 {
-                  title: "开启后",
-                  body: <>账号管理页可以读取远端同步状态，也可以执行“从 CPA 同步 / 同步至 CPA”。</>,
+                  title: "当前行为",
+                  body: <>CPA 同步接口会返回直连模式提示，不会访问远端账号管理接口。</>,
                 },
                 {
-                  title: "关闭后",
-                  body: <>同步相关能力会被禁用，但纯图片生成模式本身不受这个开关直接控制。</>,
+                  title: "图片生成",
+                  body: <>图片生成只依赖 CPA 图片 Base URL 和 CPA 图片 API Key。</>,
                 },
                 {
-                  title: "适用场景",
-                  body: <>只有你确实需要本地号池和 CPA 远端号池双向同步时才建议开启。</>,
+                  title: "建议",
+                  body: <>新部署保持关闭即可。</>,
                 },
               ]}
             />

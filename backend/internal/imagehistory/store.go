@@ -16,9 +16,9 @@ import (
 	"time"
 
 	"chatgpt2api/internal/config"
+	"chatgpt2api/internal/sqliteutil"
 
 	"github.com/redis/go-redis/v9"
-	_ "modernc.org/sqlite"
 )
 
 const (
@@ -67,6 +67,7 @@ type Turn struct {
 
 type Conversation struct {
 	ID           string        `json:"id"`
+	UserID       string        `json:"userId,omitempty"`
 	Title        string        `json:"title"`
 	Mode         string        `json:"mode"`
 	Prompt       string        `json:"prompt"`
@@ -554,7 +555,7 @@ func (b *sqliteBackend) Init() error {
 	if err := os.MkdirAll(filepath.Dir(b.path), 0o755); err != nil {
 		return err
 	}
-	db, err := sql.Open("sqlite", b.path)
+	db, err := sqliteutil.Open(b.path)
 	if err != nil {
 		return err
 	}

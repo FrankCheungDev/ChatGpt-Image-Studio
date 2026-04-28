@@ -35,6 +35,7 @@ type PromptComposerProps = {
   imageQualityDisabled: boolean;
   imageQualityDisabledReason: string;
   hasGenerateReferences: boolean;
+  quotaLabel: string;
   availableQuota: string;
   sourceImages: StoredSourceImage[];
   imagePrompt: string;
@@ -71,6 +72,7 @@ export function PromptComposer({
   imageQualityDisabled,
   imageQualityDisabledReason,
   hasGenerateReferences,
+  quotaLabel,
   availableQuota,
   sourceImages,
   imagePrompt,
@@ -264,7 +266,7 @@ export function PromptComposer({
             ) : null}
 
             <span className="shrink-0 rounded-full bg-stone-100 px-2.5 py-1.5 text-[11px] font-medium text-stone-600 sm:px-3 sm:py-2 sm:text-xs">
-              剩余额度 {availableQuota}
+              {quotaLabel} {availableQuota}
             </span>
           </div>
         </div>

@@ -1,6 +1,7 @@
 import { httpRequest } from "@/lib/request";
 import webConfig from "@/constants/common-env";
-import { getStoredAuthKey } from "@/store/auth";
+import type { CurrentUser } from "@/store/auth";
+import type { ImageConversation } from "@/store/image-conversations";
 import { buildImageAccountPolicyHeader } from "@/store/image-account-policy";
 
 export type AccountType = "Free" | "Plus" | "Pro" | "Team";
@@ -406,16 +407,87 @@ export type Sub2APIGroupsResult = {
   groups: Sub2APIGroupOption[];
 };
 
-export async function login(authKey: string) {
-  const normalizedAuthKey = String(authKey || "").trim();
-  return httpRequest<{ ok: boolean }>("/auth/login", {
+export type UserRole = "admin" | "user";
+
+export type User = CurrentUser & {
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type WorkbenchStatusResponse = {
+  user: User;
+  chatgpt: {
+    imageMode: ImageMode | string;
+    freeImageRoute: string;
+    studioAllowDisabledImageAccounts: boolean;
+  };
+  accounts: {
+    total: number;
+    available: number;
+    availableQuota: number;
+    hasAvailablePaid: boolean;
+    hasUsableFreeLegacy: boolean;
+  };
+  storage: {
+    imageConversationStorage: "browser" | "server" | string;
+    imageDataStorage: "browser" | "server" | string;
+  };
+};
+
+export async function login(username: string, password: string) {
+  return httpRequest<{ ok: boolean; user: User }>("/auth/login", {
     method: "POST",
-    body: {},
-    headers: {
-      Authorization: `Bearer ${normalizedAuthKey}`,
-    },
+    body: { username: username.trim(), password },
     redirectOnUnauthorized: false,
   });
+}
+
+export async function fetchCurrentUser() {
+  return httpRequest<{ user: User }>("/auth/me", {
+    redirectOnUnauthorized: false,
+  });
+}
+
+export async function logout() {
+  return httpRequest<{ ok: boolean }>("/auth/logout", {
+    method: "POST",
+    body: {},
+    redirectOnUnauthorized: false,
+  });
+}
+
+export async function fetchUsers() {
+  return httpRequest<{ items: User[] }>("/api/users");
+}
+
+export async function createUser(payload: {
+  username: string;
+  password: string;
+  role: UserRole;
+  disabled?: boolean;
+}) {
+  return httpRequest<{ item: User }>("/api/users", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export async function updateUser(
+  id: string,
+  payload: {
+    password?: string;
+    role?: UserRole;
+    disabled?: boolean;
+  },
+) {
+  return httpRequest<{ item: User }>(`/api/users/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: payload,
+  });
+}
+
+export async function fetchWorkbenchStatus() {
+  return httpRequest<WorkbenchStatusResponse>("/api/workbench/status");
 }
 
 export async function fetchAccounts() {
@@ -569,6 +641,16 @@ export async function fetchRequestLogs() {
   return httpRequest<{ items: RequestLogItem[] }>("/api/requests");
 }
 
+export async function fetchPlatformImageConversations() {
+  return httpRequest<{ items: ImageConversation[] }>("/api/admin/image/conversations");
+}
+
+export async function fetchPlatformImageConversation(id: string) {
+  return httpRequest<{ item: ImageConversation }>(
+    `/api/admin/image/conversations/${encodeURIComponent(id)}`,
+  );
+}
+
 export async function fetchVersionInfo() {
   return httpRequest<VersionInfo>("/version", {
     redirectOnUnauthorized: false,
@@ -584,12 +666,11 @@ export async function fetchRuntimeStatus() {
 }
 
 export async function downloadDiagnosticsExport() {
-  const authKey = await getStoredAuthKey();
   const response = await fetch(
     `${webConfig.apiUrl.replace(/\/$/, "")}/api/diagnostics/export`,
     {
       method: "GET",
-      headers: authKey ? { Authorization: `Bearer ${authKey}` } : {},
+      credentials: "include",
     },
   );
   if (!response.ok) {

@@ -7,9 +7,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 
 import { ImageEditModal } from "@/components/image-edit-modal";
 import {
-  fetchAccounts,
-  fetchConfig,
-  type Account,
+  fetchWorkbenchStatus,
   type ImageQuality,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -204,69 +202,6 @@ function formatConversationTime(value: string) {
   }).format(date);
 }
 
-function formatAvailableQuota(accounts: Account[], allowDisabled: boolean) {
-  const availableAccounts = accounts.filter((account) =>
-    isImageAccountUsable(account, allowDisabled),
-  );
-  return String(
-    availableAccounts.reduce(
-      (sum, account) => sum + getImageRemaining(account),
-      0,
-    ),
-  );
-}
-
-function getImageRemaining(account: Account) {
-  const limit = account.limits_progress?.find(
-    (item) => item.feature_name === "image_gen",
-  );
-  if (typeof limit?.remaining === "number") {
-    return Math.max(0, limit.remaining);
-  }
-  return Math.max(0, account.quota);
-}
-
-function isImageAccountUsable(account: Account, allowDisabled: boolean) {
-  const disabled = Boolean(account.disabled) || account.status === "禁用";
-  return (
-    (!disabled || allowDisabled) &&
-    account.status !== "异常" &&
-    account.status !== "限流" &&
-    getImageRemaining(account) > 0
-  );
-}
-
-function hasAvailablePaidImageAccount(
-  accounts: Account[],
-  allowDisabled: boolean,
-) {
-  return accounts.some(
-    (account) =>
-      isImageAccountUsable(account, allowDisabled) &&
-      (account.type === "Plus" ||
-        account.type === "Pro" ||
-        account.type === "Team"),
-  );
-}
-
-function hasUsableFreeLegacyAccount(
-  accounts: Account[],
-  allowDisabled: boolean,
-  imageMode: "studio" | "cpa",
-  freeImageRoute: string,
-) {
-  if (imageMode !== "studio" || freeImageRoute !== "legacy") {
-    return false;
-  }
-  return accounts.some(
-    (account) =>
-      isImageAccountUsable(account, allowDisabled) &&
-      account.type !== "Plus" &&
-      account.type !== "Pro" &&
-      account.type !== "Team",
-  );
-}
-
 async function normalizeConversationHistory(items: ImageConversation[]) {
   const normalized = items.map((item) => {
     let changed = false;
@@ -429,14 +364,14 @@ export default function ImagePage() {
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [availableQuota, setAvailableQuota] = useState("加载中");
-  const [availableAccounts, setAvailableAccounts] = useState<Account[]>([]);
-  const [allowDisabledStudioAccounts, setAllowDisabledStudioAccounts] =
+  const [hasAvailablePaidAccount, setHasAvailablePaidAccount] =
+    useState(false);
+  const [hasLegacyFreeAccountInPool, setHasLegacyFreeAccountInPool] =
     useState(false);
   const [configuredImageMode, setConfiguredImageMode] = useState<
     "studio" | "cpa"
   >("studio");
-  const [configuredFreeImageRoute, setConfiguredFreeImageRoute] =
-    useState("legacy");
+  const isCPADirectMode = configuredImageMode === "cpa";
   const [activeRequest, setActiveRequest] = useState<ActiveRequestState | null>(
     null,
   );
@@ -555,29 +490,6 @@ export default function ImagePage() {
     () => Math.max(1, Math.min(8, Number(imageCount) || 1)),
     [imageCount],
   );
-  const hasAvailablePaidAccount = useMemo(
-    () =>
-      hasAvailablePaidImageAccount(
-        availableAccounts,
-        allowDisabledStudioAccounts,
-      ),
-    [allowDisabledStudioAccounts, availableAccounts],
-  );
-  const hasLegacyFreeAccountInPool = useMemo(
-    () =>
-      hasUsableFreeLegacyAccount(
-        availableAccounts,
-        allowDisabledStudioAccounts,
-        configuredImageMode,
-        configuredFreeImageRoute,
-      ),
-    [
-      allowDisabledStudioAccounts,
-      availableAccounts,
-      configuredFreeImageRoute,
-      configuredImageMode,
-    ],
-  );
   const currentResolutionPresets = useMemo(
     () => imageResolutionPresets[imageAspectRatio],
     [imageAspectRatio],
@@ -590,30 +502,41 @@ export default function ImagePage() {
     [currentResolutionPresets, imageResolutionTier],
   );
   const currentRequestRequiresPaidAccount =
-    selectedResolutionPreset?.access === "paid";
+    selectedResolutionPreset?.access === "paid" && !isCPADirectMode;
   const imageQualityDisabledReason = currentRequestRequiresPaidAccount
     ? "当前输出档位会固定走 Paid 账号，质量参数应可正常生效。"
     : "当前可用号池里仍有 Free legacy 链路账号，标准分辨率请求可能落到该链路，质量参数无法稳定作为正式参数传给上游，暂时置灰。";
   const isImageQualityEnabled = useMemo(
     () =>
-      configuredImageMode === "cpa" ||
+      isCPADirectMode ||
       !hasLegacyFreeAccountInPool ||
-      (currentRequestRequiresPaidAccount && hasAvailablePaidAccount),
+      (selectedResolutionPreset?.access === "paid" && hasAvailablePaidAccount),
     [
-      configuredImageMode,
-      currentRequestRequiresPaidAccount,
+      isCPADirectMode,
       hasAvailablePaidAccount,
       hasLegacyFreeAccountInPool,
+      selectedResolutionPreset?.access,
     ],
   );
   const imageResolutionTierOptions = useMemo(
     () =>
-      currentResolutionPresets.map((item) => ({
-        label: `${item.access === "paid" ? "Paid" : "Free"} ${formatResolutionLabel(item.value)}${item.access === "paid" ? `（${item.label.replace("Paid ", "")}）` : ""}`,
-        value: item.tier,
-        disabled: item.access === "paid" && !hasAvailablePaidAccount,
-      })),
-    [currentResolutionPresets, hasAvailablePaidAccount],
+      currentResolutionPresets.map((item) => {
+        const cpaLabel =
+          item.tier === "sd"
+            ? `${formatResolutionLabel(item.value)}（标准）`
+            : `${formatResolutionLabel(item.value)}（${item.label.replace("Paid ", "")}）`;
+        return {
+          label: isCPADirectMode
+            ? cpaLabel
+            : `${item.access === "paid" ? "Paid" : "Free"} ${formatResolutionLabel(item.value)}${item.access === "paid" ? `（${item.label.replace("Paid ", "")}）` : ""}`,
+          value: item.tier,
+          disabled:
+            item.access === "paid" &&
+            !isCPADirectMode &&
+            !hasAvailablePaidAccount,
+        };
+      }),
+    [currentResolutionPresets, hasAvailablePaidAccount, isCPADirectMode],
   );
   const imageResolutionTierLabel = useMemo(
     () =>
@@ -629,17 +552,39 @@ export default function ImagePage() {
       currentResolutionPresets.find(
         (item) =>
           item.tier === imageResolutionTier &&
-          (hasAvailablePaidAccount || item.access === "free"),
+          (isCPADirectMode ||
+            hasAvailablePaidAccount ||
+            item.access === "free"),
       )?.value ??
       currentResolutionPresets.find(
-        (item) => hasAvailablePaidAccount || item.access === "free",
+        (item) =>
+          isCPADirectMode || hasAvailablePaidAccount || item.access === "free",
       )?.value ??
       currentResolutionPresets[0].value,
-    [currentResolutionPresets, hasAvailablePaidAccount, imageResolutionTier],
+    [
+      currentResolutionPresets,
+      hasAvailablePaidAccount,
+      imageResolutionTier,
+      isCPADirectMode,
+    ],
   );
   const imageSizeHint = useMemo(
-    () =>
-      mode === "edit" ? (
+    () => {
+      if (isCPADirectMode) {
+        return (
+          <>
+            <div>
+              <span className="font-semibold text-stone-800">CPA 直连：</span>
+              所选尺寸和质量会直接传给 CPA 图片接口，服务端不再按本地账号类型限制 2K / 4K 档。
+            </div>
+            <div className="mt-2">
+              <span className="font-semibold text-stone-800">输出说明：</span>
+              最终结果仍可能受 CPA 上游模型能力、源图比例和遮罩范围影响。
+            </div>
+          </>
+        );
+      }
+      return mode === "edit" ? (
         <>
           <div>
             <span className="font-semibold text-stone-800">编辑输出尺寸：</span>
@@ -663,8 +608,9 @@ export default function ImagePage() {
             2K 及以上像素档仅 Paid 账号可用，包括 Team / Plus / Pro。
           </div>
         </>
-      ),
-    [mode],
+      );
+    },
+    [isCPADirectMode, mode],
   );
   const imageSources = useMemo(
     () => sourceImages.filter((item) => item.role === "image"),
@@ -755,25 +701,27 @@ export default function ImagePage() {
   useEffect(() => {
     const loadQuota = async () => {
       try {
-        const [accountsData, configData] = await Promise.all([
-          fetchAccounts(),
-          fetchConfig(),
-        ]);
-        const allowDisabled =
-          configData.chatgpt.imageMode === "studio" &&
-          configData.chatgpt.studioAllowDisabledImageAccounts;
-        setAllowDisabledStudioAccounts(allowDisabled);
-        setConfiguredImageMode(configData.chatgpt.imageMode);
-        setConfiguredFreeImageRoute(configData.chatgpt.freeImageRoute);
-        setAvailableAccounts(accountsData.items);
-        setAvailableQuota(
-          formatAvailableQuota(accountsData.items, allowDisabled),
+        const status = await fetchWorkbenchStatus();
+        setConfiguredImageMode(
+          status.chatgpt.imageMode === "cpa" ? "cpa" : "studio",
         );
+        if (status.chatgpt.imageMode === "cpa") {
+          setHasAvailablePaidAccount(true);
+          setHasLegacyFreeAccountInPool(false);
+          setAvailableQuota("CPA 直连");
+        } else {
+          setHasAvailablePaidAccount(Boolean(status.accounts.hasAvailablePaid));
+          setHasLegacyFreeAccountInPool(
+            Boolean(status.accounts.hasUsableFreeLegacy),
+          );
+          setAvailableQuota(
+            String(Math.max(0, status.accounts.availableQuota)),
+          );
+        }
       } catch {
-        setAvailableAccounts([]);
-        setAllowDisabledStudioAccounts(false);
+        setHasAvailablePaidAccount(false);
+        setHasLegacyFreeAccountInPool(false);
         setConfiguredImageMode("studio");
-        setConfiguredFreeImageRoute("legacy");
         setAvailableQuota((prev) => (prev === "加载中" ? "—" : prev));
       }
     };
@@ -791,17 +739,25 @@ export default function ImagePage() {
     );
     if (
       selectedPreset &&
-      (hasAvailablePaidAccount || selectedPreset.access === "free")
+      (isCPADirectMode ||
+        hasAvailablePaidAccount ||
+        selectedPreset.access === "free")
     ) {
       return;
     }
     const nextPreset = currentResolutionPresets.find(
-      (item) => hasAvailablePaidAccount || item.access === "free",
+      (item) =>
+        isCPADirectMode || hasAvailablePaidAccount || item.access === "free",
     );
     if (nextPreset && nextPreset.tier !== imageResolutionTier) {
       setImageResolutionTier(nextPreset.tier);
     }
-  }, [currentResolutionPresets, hasAvailablePaidAccount, imageResolutionTier]);
+  }, [
+    currentResolutionPresets,
+    hasAvailablePaidAccount,
+    imageResolutionTier,
+    isCPADirectMode,
+  ]);
 
   useEffect(() => {
     if (!isImageQualityEnabled && imageQuality !== "high") {
@@ -1211,6 +1167,7 @@ export default function ImagePage() {
         imageQualityDisabled={!isImageQualityEnabled}
         imageQualityDisabledReason={imageQualityDisabledReason}
         hasGenerateReferences={hasGenerateReferences}
+        quotaLabel={isCPADirectMode ? "调用模式" : "剩余额度"}
         availableQuota={availableQuota}
         sourceImages={sourceImages}
         imagePrompt={imagePrompt}

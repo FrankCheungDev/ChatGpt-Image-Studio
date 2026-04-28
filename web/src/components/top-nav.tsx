@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Activity, ChevronLeft, ImageIcon, LogOut, PanelLeftClose, PanelLeftOpen, Settings2, Shield, Sparkles } from "lucide-react";
+import { ChevronLeft, History, ImageIcon, LogOut, PanelLeftClose, PanelLeftOpen, Sparkles, Users } from "lucide-react";
 
-import { fetchVersionInfo } from "@/lib/api";
-import { clearStoredAuthKey } from "@/store/auth";
+import { fetchCurrentUser, fetchVersionInfo, logout, type User } from "@/lib/api";
+import { clearStoredAuthKey, setStoredUser } from "@/store/auth";
 import { cn } from "@/lib/utils";
 
 const repositoryUrl = "https://github.com/peiyizhi0724/ChatGpt-Image-Studio";
@@ -17,12 +17,43 @@ function formatVersionLabel(value: string) {
   return normalized ? `v${normalized}` : "读取中";
 }
 
-const navItems = [
-  { href: "/image/history", matchPrefix: "/image", label: "图片工作台", description: "生成与编辑", icon: ImageIcon },
-  { href: "/accounts", matchPrefix: "/accounts", label: "账号管理", description: "号池、额度与同步", icon: Shield },
-  { href: "/settings", matchPrefix: "/settings", label: "配置管理", description: "模式、接口与后端配置", icon: Settings2 },
-  { href: "/requests", matchPrefix: "/requests", label: "调用请求", description: "查看官方与 CPA 请求方向", icon: Activity },
+const imageNavItem = {
+  href: "/image/history",
+  matchPrefix: "/image",
+  label: "图片工作台",
+  description: "生成与编辑",
+  icon: ImageIcon,
+} as const;
+
+const adminNavItems = [
+  imageNavItem,
+  {
+    href: "/users",
+    matchPrefix: "/users",
+    label: "用户管理",
+    description: "账号与权限",
+    icon: Users,
+  },
+  {
+    href: "/admin/history",
+    matchPrefix: "/admin/history",
+    label: "平台历史",
+    description: "全部用户记录",
+    icon: History,
+  },
 ] as const;
+
+type NavItem = {
+  href: string;
+  matchPrefix?: string;
+  label: string;
+  description: string;
+  icon: typeof ImageIcon;
+};
+
+const userNavItems: NavItem[] = [
+  { href: "/image/history", matchPrefix: "/image", label: "图片工作台", description: "生成与编辑", icon: ImageIcon },
+];
 
 function isNavItemActive(pathname: string, href: string, matchPrefix?: string) {
   if (matchPrefix) {
@@ -35,10 +66,11 @@ type DesktopTopNavProps = {
   pathname: string;
   defaultCollapsed: boolean;
   versionLabel: string;
+  navItems: NavItem[];
   onLogout: () => Promise<void>;
 };
 
-function DesktopTopNav({ pathname, defaultCollapsed, versionLabel, onLogout }: DesktopTopNavProps) {
+function DesktopTopNav({ pathname, defaultCollapsed, versionLabel, navItems, onLogout }: DesktopTopNavProps) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
   return (
@@ -155,6 +187,8 @@ export function TopNav() {
   const [mobileHeaderHeight, setMobileHeaderHeight] = useState(0);
   const [mobileWorkspaceHeaderHeight, setMobileWorkspaceHeaderHeight] = useState(0);
   const [mobileWorkspaceTitle, setMobileWorkspaceTitle] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const visibleNavItems = currentUser?.role === "admin" ? [...adminNavItems] : userNavItems;
   const mobileHeaderRef = useRef<HTMLElement | null>(null);
   const mobileWorkspaceHeaderRef = useRef<HTMLDivElement | null>(null);
   const setMobileHeaderRef = (node: HTMLElement | null) => {
@@ -186,6 +220,32 @@ export function TopNav() {
   useEffect(() => {
     setMobileNavExpanded(false);
   }, [pathname]);
+
+  useEffect(() => {
+    if (pathname === "/login" || pathname === "/login.html" || pathname.startsWith("/login/")) {
+      return;
+    }
+    let cancelled = false;
+    const loadUser = async () => {
+      try {
+        const payload = await fetchCurrentUser();
+        if (!cancelled) {
+          setCurrentUser(payload.user);
+          await setStoredUser(payload.user);
+        }
+      } catch {
+        if (!cancelled) {
+          await clearStoredAuthKey();
+          setCurrentUser(null);
+          navigate("/login", { replace: true });
+        }
+      }
+    };
+    void loadUser();
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate, pathname]);
 
   useEffect(() => {
     const element = mobileHeaderRef.current;
@@ -250,7 +310,13 @@ export function TopNav() {
   }, [isImageRoute]);
 
   const handleLogout = async () => {
+    try {
+      await logout();
+    } catch {
+      // Ignore logout transport failures; local session state is cleared below.
+    }
     await clearStoredAuthKey();
+    setCurrentUser(null);
     navigate("/login", { replace: true });
   };
 
@@ -295,7 +361,7 @@ export function TopNav() {
                 to="/image/history"
                 className="hidden rounded-2xl border border-stone-200 bg-white px-3 py-2 text-xs font-medium text-stone-600 shadow-sm sm:inline-flex"
               >
-                {navItems.find((item) => isNavItemActive(pathname, item.href, item.matchPrefix))?.label ?? "导航"}
+                {visibleNavItems.find((item) => isNavItemActive(pathname, item.href, item.matchPrefix))?.label ?? "导航"}
               </Link>
               <button
                 type="button"
@@ -310,7 +376,7 @@ export function TopNav() {
           {mobileNavExpanded ? (
             <nav className="hide-scrollbar mt-3 -mx-1 overflow-x-auto px-1">
               <div className="inline-flex min-w-full gap-2 rounded-[20px] bg-white/55 p-1">
-                {navItems.map((item) => {
+                {visibleNavItems.map((item) => {
                   const active = isNavItemActive(pathname, item.href, item.matchPrefix);
                   const Icon = item.icon;
                   return (
@@ -405,7 +471,7 @@ export function TopNav() {
             </div>
             <nav className="hide-scrollbar mt-3 -mx-1 overflow-x-auto px-1">
               <div className="inline-flex min-w-full gap-2 rounded-[20px] bg-white/55 p-1">
-                {navItems.map((item) => {
+                {visibleNavItems.map((item) => {
                   const active = isNavItemActive(pathname, item.href, item.matchPrefix);
                   const Icon = item.icon;
                   return (
@@ -434,6 +500,7 @@ export function TopNav() {
         pathname={pathname}
         defaultCollapsed={isImageRoute}
         versionLabel={versionLabel}
+        navItems={visibleNavItems}
         onLogout={handleLogout}
       />
     </>

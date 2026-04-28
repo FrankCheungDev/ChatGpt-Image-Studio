@@ -2,7 +2,7 @@
 
 import localforage from "localforage";
 
-import { fetchConfig, type ImageModel, type ImageQuality } from "@/lib/api";
+import { fetchWorkbenchStatus, type ImageModel, type ImageQuality } from "@/lib/api";
 import webConfig from "@/constants/common-env";
 import { httpRequest } from "@/lib/request";
 
@@ -51,6 +51,7 @@ export type ImageConversationTurn = {
 
 export type ImageConversation = {
   id: string;
+  userId?: string;
   title: string;
   mode: ImageMode;
   prompt: string;
@@ -354,7 +355,7 @@ async function getImageConversationStorageMode() {
     return cachedImageConversationStorageMode;
   }
   try {
-    const config = await fetchConfig();
+    const config = await fetchWorkbenchStatus();
     setCachedImageConversationStorageMode(
       config.storage.imageConversationStorage === "server"
         ? "server"

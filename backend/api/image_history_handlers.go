@@ -26,10 +26,35 @@ func (s *Server) handleListImageConversations(w http.ResponseWriter, r *http.Req
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
+	user, ok := userFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "authorization is invalid"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": filterImageConversationsByUser(items, user.ID)})
+}
+
+func (s *Server) handleListAllImageConversations(w http.ResponseWriter, r *http.Request) {
+	if !s.serverImageConversationStorageEnabled() {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "server image storage is disabled"})
+		return
+	}
+	store, err := imagehistory.NewStore(s.cfg)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	defer store.Close()
+
+	items, err := store.List(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 
-func (s *Server) handleGetImageConversation(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleGetAnyImageConversation(w http.ResponseWriter, r *http.Request) {
 	if !s.serverImageConversationStorageEnabled() {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "server image storage is disabled"})
 		return
@@ -53,6 +78,39 @@ func (s *Server) handleGetImageConversation(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, map[string]any{"item": item})
 }
 
+func (s *Server) handleGetImageConversation(w http.ResponseWriter, r *http.Request) {
+	if !s.serverImageConversationStorageEnabled() {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "server image storage is disabled"})
+		return
+	}
+	store, err := imagehistory.NewStore(s.cfg)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	defer store.Close()
+
+	item, err := store.Get(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	if item == nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "conversation not found"})
+		return
+	}
+	user, ok := userFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "authorization is invalid"})
+		return
+	}
+	if item.UserID != user.ID {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "conversation not found"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"item": item})
+}
+
 func (s *Server) handleSaveImageConversation(w http.ResponseWriter, r *http.Request) {
 	if !s.serverImageConversationStorageEnabled() {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "server image storage is disabled"})
@@ -66,6 +124,12 @@ func (s *Server) handleSaveImageConversation(w http.ResponseWriter, r *http.Requ
 	if pathID := strings.TrimSpace(r.PathValue("id")); pathID != "" {
 		body.ID = pathID
 	}
+	user, ok := userFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "authorization is invalid"})
+		return
+	}
+	body.UserID = user.ID
 
 	store, err := imagehistory.NewStore(s.cfg)
 	if err != nil {
@@ -94,6 +158,20 @@ func (s *Server) handleDeleteImageConversation(w http.ResponseWriter, r *http.Re
 	}
 	defer store.Close()
 
+	item, err := store.Get(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	user, ok := userFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "authorization is invalid"})
+		return
+	}
+	if item == nil || item.UserID != user.ID {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "conversation not found"})
+		return
+	}
 	if err := store.Delete(r.Context(), r.PathValue("id")); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
@@ -113,9 +191,24 @@ func (s *Server) handleClearImageConversations(w http.ResponseWriter, r *http.Re
 	}
 	defer store.Close()
 
-	if err := store.Clear(r.Context()); err != nil {
+	user, ok := userFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "authorization is invalid"})
+		return
+	}
+	items, err := store.List(r.Context())
+	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
+	}
+	for _, item := range items {
+		if item.UserID != user.ID {
+			continue
+		}
+		if err := store.Delete(r.Context(), item.ID); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+			return
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
@@ -173,4 +266,14 @@ func (s *Server) handleImportImageConversations(w http.ResponseWriter, r *http.R
 
 func (s *Server) serverImageConversationStorageEnabled() bool {
 	return strings.EqualFold(strings.TrimSpace(s.cfg.Storage.ImageConversationStorage), "server")
+}
+
+func filterImageConversationsByUser(items []imagehistory.Conversation, userID string) []imagehistory.Conversation {
+	filtered := make([]imagehistory.Conversation, 0, len(items))
+	for _, item := range items {
+		if item.UserID == userID {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
 }

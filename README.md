@@ -24,7 +24,7 @@ ChatGpt Image Studio 是一个单服务交付的图片工作流项目：
 - 本地认证文件导入与账号池管理
 - `Studio` 模式支持直接导入 `access_token`，并将 `Token` 账号与认证文件账号分开管理
 - 支持单账号刷新、一键批量刷新额度与刷新进度展示
-- 支持 `CPA / NewAPI / Sub2API` 多来源账号同步与推送
+- 支持 `CPA` 图片接口直连；`NewAPI / Sub2API` 账号同步仍可按需使用
 - 请求记录页可区分官方与 CPA 链路，并记录 `size / quality / promptLength`
 - 配置管理页，可直接修改 `data/config.toml`
 
@@ -59,12 +59,11 @@ ChatGpt Image Studio 是一个单服务交付的图片工作流项目：
 
 - 支持导入本地认证文件
 - 支持在 `Studio` 模式下直接导入 `access_token`
-- `Token` 账号不会参与 `CPA / NewAPI / Sub2API` 的同步和推送
+- `Token` 账号不会参与 `NewAPI / Sub2API` 的同步和推送
 - 支持单账号额度刷新与一键批量刷新全部额度
 - 批量刷新会限制并发，并在页面显示实时进度
-- 支持：
-  - 从 `CPA / NewAPI / Sub2API` 同步账号到本地
-  - 推送本地账号到 `CPA / NewAPI / Sub2API`
+- `CPA` 模式只直连图片接口，不再同步、拉取或推送 CPA 账号
+- 支持从 `NewAPI / Sub2API` 同步账号到本地，或推送本地账号到 `NewAPI / Sub2API`
 
 ## 界面预览
 
@@ -138,42 +137,83 @@ chmod +x ./scripts/*.sh
 
 ## Docker 部署
 
-当前仓库支持通过 GitHub Container Registry 直接拉取镜像部署。
-
-镜像发布规则：
-
-- 推送到 `main` 分支后，GitHub Actions 会自动更新 `ghcr.io/peiyizhi0724/chatgpt-image-studio:latest`
-- 推送版本标签 `v1.2.x` 后，会额外发布同名版本镜像标签
-- Docker 镜像同时提供 `linux/amd64` 与 `linux/arm64`
+当前仓库默认支持直接用本地代码构建镜像部署，不依赖他人已经发布的镜像。
 
 ### 首次启动
 
+先准备本地启动变量与服务端配置：
+
 ```bash
-docker compose pull
-docker compose up -d
+cp .env.example .env
+mkdir -p backend/data
+
+# 如果本机已经有 backend/data/config.example.toml，也可以复制它。
+cp backend/internal/config/config.defaults.toml backend/data/config.toml
+```
+
+然后编辑：
+
+- `.env`：端口、镜像 tag、首次管理员账号与密码
+- `backend/data/config.toml`：CPA 地址、CPA Key、存储方式、图片模式等服务端配置
+
+云端 SQLite + 服务端历史推荐至少确认这些项：
+
+```toml
+[chatgpt]
+image_mode = "cpa"
+
+[storage]
+backend = "sqlite"
+image_conversation_storage = "server"
+image_data_storage = "server"
+sqlite_path = "data/chatgpt-image-studio.db"
+image_dir = "data/tmp/image"
+
+[cpa]
+base_url = "https://your-cpa.example"
+api_key = "your-cpa-key"
+route_strategy = "images_api"
+
+[sync]
+enabled = false
+```
+
+启动：
+
+```bash
+docker compose up -d --build
 ```
 
 默认会：
 
-- 使用 `ghcr.io/peiyizhi0724/chatgpt-image-studio:latest`，也就是 `main` 分支当前最新镜像
+- 使用当前 checkout 的 `Dockerfile` 构建 `chatgpt-image-studio:local`
 - 将宿主机的 `./backend/data` 挂载到容器内 `/app/data`
-- 对外暴露 `7000` 端口
+- 按 `backend/data/config.toml` 中的配置决定存储后端、图片模式和 CPA 直连接口
+- 默认对外暴露 `7000` 端口；如宿主机端口冲突，可在 `.env` 设置 `HOST_PORT=17000` 后访问 `http://127.0.0.1:17000`
 
-如需固定到某个版本，可先设置：
+首次启动时，如果数据库里还没有用户，会自动创建管理员账号：
+
+- `ADMIN_USERNAME` 默认是 `admin`
+- `ADMIN_PASSWORD` 默认是 `chatgpt2api`，云端部署必须显式改掉
+- 这两个值只用于空数据库首次创建管理员；已有用户库不会用它们覆盖现有密码
+
+更新当前本地代码后重新构建：
 
 ```bash
-export IMAGE_TAG=v1.2.8
-docker compose pull
-docker compose up -d
+docker compose up -d --build
 ```
 
 Windows PowerShell：
 
 ```powershell
-$env:IMAGE_TAG = "v1.2.8"
-docker compose pull
-docker compose up -d
+Copy-Item .env.example .env
+New-Item -ItemType Directory -Force backend/data
+Copy-Item backend/internal/config/config.defaults.toml backend/data/config.toml
+# 编辑 .env 和 backend/data/config.toml 后启动
+docker compose up -d --build
 ```
+
+如需继续使用远端 GHCR 镜像，可手动把 `docker-compose.yml` 的 `image` 改回对应镜像地址，或直接使用 `docker run` 指定镜像。
 
 ### 无状态云部署（Redis 引导启动示例）
 
@@ -181,8 +221,8 @@ docker compose up -d
 
 - 账号池存到 Redis
 - 配置存到 Redis
-- 图片会话记录保留在浏览器
-- 图片数据保留在浏览器
+- 图片会话记录保留在浏览器，或搭配持久化目录保存到服务端
+- 图片数据保留在浏览器，或搭配持久化目录保存到服务端
 
 推荐启动方式：
 
@@ -192,6 +232,8 @@ docker run -d \
   -p 7000:7000 \
   -e SERVER_HOST=0.0.0.0 \
   -e SERVER_PORT=7000 \
+  -e ADMIN_USERNAME=admin \
+  -e ADMIN_PASSWORD=change-this-password \
   -e STORAGE_BACKEND=redis \
   -e STORAGE_CONFIG_BACKEND=redis \
   -e REDIS_ADDR=your-redis-host:6379 \
@@ -207,7 +249,7 @@ docker run -d \
 说明：
 
 - 这组环境变量的作用是让程序每次启动时都能先从 Redis 读取配置引导。
-- 启动成功后，其他配置仍可在页面“配置管理”中继续修改，并持久化到 Redis。
+- 启动成功后，管理员可在用户管理页创建普通用户。
 - 如果没有持久化磁盘，不建议把 `image_conversation_storage` 或 `image_data_storage` 设为 `server`，否则服务端图片历史和图片文件在容器重建后仍会丢失。
 
 ### 一键更新
@@ -229,7 +271,7 @@ chmod +x ./scripts/docker-update.sh
 
 1. 检查 Docker / Docker Compose
 2. 如果当前目录是 Git 仓库，则先 `git pull --ff-only origin main`
-3. 从 GitHub Container Registry 拉取 `latest` 镜像
+3. 使用当前本地代码重新构建镜像
 4. 重新创建并启动容器
 
 ### 配置文件
@@ -259,15 +301,19 @@ auth_key = "chatgpt2api"
 
 如果你没有修改 `[app].auth_key`，首次进入时直接输入上面的默认密码即可。
 
-如果需要接入 CPA 同步：
+如果需要接入 CPA 图片直连：
 
 ```toml
-[sync]
-enabled = true
-base_url = "http://127.0.0.1:8317"
-management_key = "your-cliproxy-management-key"
-provider_type = "codex"
+[chatgpt]
+image_mode = "cpa"
+
+[cpa]
+base_url = "https://your-cpa.example.com"
+api_key = "your-cpa-image-api-key"
+route_strategy = "images_api"
 ```
+
+CPA 模式不需要配置或同步 CPA 账号；2K / 4K 等生图尺寸由前端直接开放，最终是否可用由 CPA 上游接口决定。
 
 如果需要通过固定代理访问 ChatGPT，可追加：
 
@@ -454,6 +500,8 @@ $env:RUN_IMAGE_MODE_COMPAT_TESTS = "1"
 
 - `GET /api/sync/status`
 - `POST /api/sync/run`
+
+`source=cpa` 会返回 CPA 图片直连提示并作为 no-op 处理，不会访问 CPA 账号管理接口。
 
 ### 图片历史
 
