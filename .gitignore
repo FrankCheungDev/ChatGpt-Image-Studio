@@ -40,6 +40,7 @@ Thumbs.db
 /backend/data/*.db-shm
 /backend/data/*.db-wal
 /backend/data/auths/*.json
+/backend/data/image_history/
 /backend/data/sync_state/*.json
 /backend/data/tmp/
 /backend/data/last-startup-error.txt
