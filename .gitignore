@@ -35,7 +35,6 @@ Thumbs.db
 
 # Backend local data
 /backend/data/config.toml
-/backend/data/config.example.toml
 /backend/data/accounts_state.json
 /backend/data/*.db
 /backend/data/*.db-shm
