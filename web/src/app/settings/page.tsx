@@ -18,10 +18,8 @@ import {
   type ConfigPayload,
 } from "@/lib/api";
 import {
-  exportLocalImageConversationsSnapshot,
   exportServerImageConversationsSnapshot,
   importImageConversationsToServerTarget,
-  migrateImageConversationStorage,
   setCachedImageConversationStorageMode,
 } from "@/store/image-conversations";
 import { clearCachedSyncStatus } from "@/store/sync-status-cache";
@@ -95,15 +93,15 @@ function defaultConfigPayload(): ConfigPayload {
       imageQuotaRefreshTTLSeconds: 120,
     },
     storage: {
-      backend: "current",
+      backend: "sqlite",
       configBackend: "file",
       authDir: "",
       stateFile: "",
       syncStateDir: "",
       imageDir: "",
-      imageStorage: "browser",
-      imageConversationStorage: "browser",
-      imageDataStorage: "browser",
+      imageStorage: "server",
+      imageConversationStorage: "server",
+      imageDataStorage: "server",
       sqlitePath: "",
       redisAddr: "127.0.0.1:6379",
       redisPassword: "",
@@ -174,17 +172,9 @@ function normalizeConfigPayload(
   if (chatgpt.imageMode !== "studio" && chatgpt.imageMode !== "cpa") {
     chatgpt.imageMode = "studio";
   }
-  const legacyImageStorage =
-    storage.imageStorage === "server" ? "server" : "browser";
-  storage.imageConversationStorage =
-    storage.imageConversationStorage === "server"
-      ? "server"
-      : legacyImageStorage;
-  storage.imageDataStorage =
-    storage.imageDataStorage === "server"
-      ? "server"
-      : storage.imageConversationStorage;
-  storage.imageStorage = storage.imageConversationStorage;
+  storage.imageConversationStorage = "server";
+  storage.imageDataStorage = "server";
+  storage.imageStorage = "server";
 
   return {
     ...defaults,
@@ -254,22 +244,6 @@ export default function SettingsPage() {
     if (!savedConfig) {
       return "";
     }
-    const previousConversationStorage =
-      savedConfig.storage.imageConversationStorage === "server"
-        ? "服务器存储"
-        : "浏览器存储";
-    const nextConversationStorage =
-      config.storage.imageConversationStorage === "server"
-        ? "服务器存储"
-        : "浏览器存储";
-    const previousImageDataStorage =
-      savedConfig.storage.imageDataStorage === "server"
-        ? "服务器目录"
-        : "浏览器 local";
-    const nextImageDataStorage =
-      config.storage.imageDataStorage === "server"
-        ? "服务器目录"
-        : "浏览器 local";
     const previousAccountStorage =
       savedConfig.storage.backend === "sqlite"
         ? "SQLite 数据库"
@@ -300,24 +274,6 @@ export default function SettingsPage() {
         `配置文件会从${previousConfigStorage}迁移到${nextConfigStorage}。`,
       );
     }
-    if (previousConversationStorage !== nextConversationStorage) {
-      messages.push(
-        `图片会话记录会从${previousConversationStorage}迁移到${nextConversationStorage}。`,
-      );
-    }
-    if (previousImageDataStorage !== nextImageDataStorage) {
-      messages.push(
-        `图片数据会从${previousImageDataStorage}迁移到${nextImageDataStorage}。`,
-      );
-    }
-    if (
-      savedConfig.storage.imageConversationStorage === "server" &&
-      config.storage.imageConversationStorage === "browser"
-    ) {
-      messages.push(
-        "这次迁移需要把服务器图片重新下载回当前浏览器，历史图片较多时会更慢。",
-      );
-    }
     return messages.join(" ");
   }, [config, savedConfig]);
 
@@ -330,11 +286,7 @@ export default function SettingsPage() {
       ]);
       const normalizedConfig = normalizeConfigPayload(currentConfig);
       const normalizedDefaults = normalizeConfigPayload(defaults);
-      setCachedImageConversationStorageMode(
-        normalizedConfig.storage.imageConversationStorage === "server"
-          ? "server"
-          : "browser",
-      );
+      setCachedImageConversationStorageMode("server");
       setConfig(normalizedConfig);
       setSavedConfig(normalizedConfig);
       setDefaultConfig(normalizedDefaults);
@@ -365,50 +317,21 @@ export default function SettingsPage() {
       const previousConfig = savedConfig
         ? normalizeConfigPayload(savedConfig)
         : normalizeConfigPayload(config);
-      const previousConversationStorage =
-        previousConfig.storage.imageConversationStorage === "server"
-          ? "server"
-          : "browser";
-      const nextConversationStorage =
-        config.storage.imageConversationStorage === "server"
-          ? "server"
-          : "browser";
       const needsServerHistoryMigration =
-        (previousConversationStorage === "server" &&
-          nextConversationStorage === "server" &&
-          previousConfig.storage.backend !== config.storage.backend) ||
-        previousConversationStorage !== nextConversationStorage;
+        previousConfig.storage.backend !== config.storage.backend;
       const sourceItems = needsServerHistoryMigration
-        ? previousConversationStorage === "server"
-          ? await exportServerImageConversationsSnapshot()
-          : await exportLocalImageConversationsSnapshot()
+        ? await exportServerImageConversationsSnapshot()
         : null;
       if (needsServerHistoryMigration && sourceItems) {
-        if (nextConversationStorage === "server") {
-          await importImageConversationsToServerTarget(
-            sourceItems,
-            config.storage,
-          );
-        } else {
-          await migrateImageConversationStorage({
-            from: previousConversationStorage,
-            to: nextConversationStorage,
-            targetImageDataStorage:
-              config.storage.imageDataStorage === "server"
-                ? "server"
-                : "browser",
-            sourceItems,
-          });
-        }
+        await importImageConversationsToServerTarget(
+          sourceItems,
+          config.storage,
+        );
       }
       const result = await updateConfig(config);
       const normalizedConfig = normalizeConfigPayload(result.config);
       const migratedCount = sourceItems?.length ?? 0;
-      setCachedImageConversationStorageMode(
-        normalizedConfig.storage.imageConversationStorage === "server"
-          ? "server"
-          : "browser",
-      );
+      setCachedImageConversationStorageMode("server");
       clearCachedSyncStatus();
       setConfig(normalizedConfig);
       setSavedConfig(normalizedConfig);

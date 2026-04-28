@@ -71,10 +71,8 @@ export function IntegrationSection({ config, setSection }: IntegrationSectionPro
   const usesRedisAccountStorage = config.storage.backend === "redis";
   const usesRedisConfigStorage = config.storage.configBackend === "redis";
   const shouldShowRedisFields = usesRedisAccountStorage || usesRedisConfigStorage;
-  const imageConversationStorage =
-    config.storage.imageConversationStorage === "server" ? "server" : "browser";
-  const imageDataStorage =
-    config.storage.imageDataStorage === "server" ? "server" : "browser";
+  const imageConversationStorage = "server";
+  const imageDataStorage = "server";
   const serverConversationStorageLabel =
     config.storage.backend === "sqlite"
       ? "SQLite 数据库"
@@ -83,10 +81,10 @@ export function IntegrationSection({ config, setSection }: IntegrationSectionPro
         : "程序目录";
   const serverConversationStorageHint =
     config.storage.backend === "sqlite"
-      ? "服务器侧会话记录会写入当前 SQLite 数据库文件。"
+      ? "会话记录会写入当前 SQLite 数据库文件，并按用户隔离。"
       : config.storage.backend === "redis"
-        ? "服务器侧会话记录会写入当前 Redis。"
-        : "服务器侧会话记录会写入当前程序目录下的数据目录。";
+        ? "会话记录会写入当前 Redis，并按用户隔离。"
+        : "会话记录会写入当前程序目录下的数据目录，并按用户隔离。";
 
   const sub2apiGroupHint = useMemo(() => {
     if (sub2apiGroups.length === 0) {
@@ -474,7 +472,7 @@ export function IntegrationSection({ config, setSection }: IntegrationSectionPro
         </Field>
         <Field
           label="会话记录存储"
-          hint={`切换后保存配置时会自动迁移现有图片会话记录；从${serverConversationStorageLabel}切回浏览器时，需要把历史图片下载回当前浏览器。${serverConversationStorageHint}`}
+          hint={`图片历史由服务端接口提供，不再使用浏览器本地历史。${serverConversationStorageHint}`}
         >
           <Select
             value={imageConversationStorage}
@@ -491,18 +489,13 @@ export function IntegrationSection({ config, setSection }: IntegrationSectionPro
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="browser">浏览器存储</SelectItem>
               <SelectItem value="server">{serverConversationStorageLabel}</SelectItem>
             </SelectContent>
           </Select>
         </Field>
         <Field
           label="图片数据存储"
-          hint={
-            imageConversationStorage === "server"
-              ? "当前会话记录已使用服务器侧存储，图片数据也必须写入本地/服务器目录；切换后保存配置时会自动迁移。"
-              : "当前会话记录使用浏览器存储，图片数据会随会话一起保存在浏览器 local；切换后保存配置时会自动迁移。"
-          }
+          hint="图片历史已经使用服务端存储，图片数据也写入本地/服务器目录，避免浏览器历史无法关联用户。"
         >
           <Select
             value={imageDataStorage}
@@ -519,8 +512,7 @@ export function IntegrationSection({ config, setSection }: IntegrationSectionPro
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="browser" disabled={imageConversationStorage === "server"}>浏览器 local</SelectItem>
-              <SelectItem value="server" disabled={imageConversationStorage !== "server"}>本地/服务器目录</SelectItem>
+              <SelectItem value="server">本地/服务器目录</SelectItem>
             </SelectContent>
           </Select>
         </Field>

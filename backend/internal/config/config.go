@@ -655,12 +655,7 @@ func normalizeConfigBackend(value string) string {
 }
 
 func normalizeImageStorage(value string) string {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "server":
-		return "server"
-	default:
-		return "browser"
-	}
+	return "server"
 }
 
 func normalizeCPAImageRouteStrategy(value string) string {

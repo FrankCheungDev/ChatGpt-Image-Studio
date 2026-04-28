@@ -194,7 +194,7 @@ func TestNormalizeCPAImageRouteStrategyPreservesKnownValues(t *testing.T) {
 	}
 }
 
-func TestValidateDefaultsImageConversationAndDataStorageToBrowser(t *testing.T) {
+func TestValidateDefaultsImageConversationAndDataStorageToServer(t *testing.T) {
 	cfg := &Config{
 		Storage: StorageConfig{
 			Backend:       "current",
@@ -210,11 +210,42 @@ func TestValidateDefaultsImageConversationAndDataStorageToBrowser(t *testing.T) 
 	if err := cfg.validate(); err != nil {
 		t.Fatalf("validate() returned error: %v", err)
 	}
-	if cfg.Storage.ImageConversationStorage != "browser" {
-		t.Fatalf("ImageConversationStorage = %q, want browser", cfg.Storage.ImageConversationStorage)
+	if cfg.Storage.ImageConversationStorage != "server" {
+		t.Fatalf("ImageConversationStorage = %q, want server", cfg.Storage.ImageConversationStorage)
 	}
-	if cfg.Storage.ImageDataStorage != "browser" {
-		t.Fatalf("ImageDataStorage = %q, want browser", cfg.Storage.ImageDataStorage)
+	if cfg.Storage.ImageDataStorage != "server" {
+		t.Fatalf("ImageDataStorage = %q, want server", cfg.Storage.ImageDataStorage)
+	}
+}
+
+func TestValidateCoercesBrowserImageConversationStorageToServer(t *testing.T) {
+	cfg := &Config{
+		Storage: StorageConfig{
+			Backend:                  "current",
+			ConfigBackend:            "file",
+			ImageStorage:             "browser",
+			ImageConversationStorage: "browser",
+			ImageDataStorage:         "browser",
+		},
+		ChatGPT: ChatGPTConfig{
+			ImageMode:      "studio",
+			FreeImageRoute: "legacy",
+			PaidImageRoute: "responses",
+		},
+	}
+
+	if err := cfg.validate(); err != nil {
+		t.Fatalf("validate() returned error: %v", err)
+	}
+	if cfg.Storage.ImageStorage != "server" ||
+		cfg.Storage.ImageConversationStorage != "server" ||
+		cfg.Storage.ImageDataStorage != "server" {
+		t.Fatalf(
+			"storage modes = image %q conversation %q data %q, want server/server/server",
+			cfg.Storage.ImageStorage,
+			cfg.Storage.ImageConversationStorage,
+			cfg.Storage.ImageDataStorage,
+		)
 	}
 }
 

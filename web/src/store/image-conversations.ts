@@ -2,7 +2,7 @@
 
 import localforage from "localforage";
 
-import { fetchWorkbenchStatus, type ImageModel, type ImageQuality } from "@/lib/api";
+import { type ImageModel, type ImageQuality } from "@/lib/api";
 import webConfig from "@/constants/common-env";
 import { httpRequest } from "@/lib/request";
 
@@ -82,39 +82,18 @@ let cachedConversations: ImageConversation[] | null = null;
 let cachedConversationsStorageMode: ImageConversationStorageMode | null = null;
 let loadPromise: Promise<ImageConversation[]> | null = null;
 let writeQueue: Promise<void> = Promise.resolve();
-let cachedImageConversationStorageMode: "browser" | "server" | null =
-  readPersistedImageConversationStorageMode();
+let cachedImageConversationStorageMode: "server" | null = "server";
 
 function sortConversations(items: ImageConversation[]) {
   return [...items].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-function readPersistedImageConversationStorageMode(): ImageConversationStorageMode | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  try {
-    const raw = window.localStorage.getItem(
-      IMAGE_CONVERSATION_STORAGE_MODE_KEY,
-    );
-    return raw === "server" ? "server" : raw === "browser" ? "browser" : null;
-  } catch {
-    return null;
-  }
-}
-
-function persistImageConversationStorageMode(
-  mode: ImageConversationStorageMode | null,
-) {
+function persistImageConversationStorageMode() {
   if (typeof window === "undefined") {
     return;
   }
   try {
-    if (mode) {
-      window.localStorage.setItem(IMAGE_CONVERSATION_STORAGE_MODE_KEY, mode);
-      return;
-    }
-    window.localStorage.removeItem(IMAGE_CONVERSATION_STORAGE_MODE_KEY);
+    window.localStorage.setItem(IMAGE_CONVERSATION_STORAGE_MODE_KEY, "server");
   } catch {
     // Ignore localStorage write failures and keep using in-memory state.
   }
@@ -174,8 +153,8 @@ function setCachedConversationsSnapshot(
 export function setCachedImageConversationStorageMode(
   mode: ImageConversationStorageMode | null,
 ) {
-  cachedImageConversationStorageMode = mode;
-  persistImageConversationStorageMode(mode);
+  cachedImageConversationStorageMode = "server";
+  persistImageConversationStorageMode();
 }
 
 async function persistConversationCache() {
@@ -193,7 +172,7 @@ async function persistConversationCache() {
 function normalizeStorageMode(
   value: string | null | undefined,
 ): ImageConversationStorageMode {
-  return value === "server" ? "server" : "browser";
+  return "server";
 }
 
 function toAbsoluteImageURL(raw: string | undefined) {
@@ -351,25 +330,8 @@ export function normalizeConversation(
 }
 
 async function getImageConversationStorageMode() {
-  if (cachedImageConversationStorageMode) {
-    return cachedImageConversationStorageMode;
-  }
-  try {
-    const config = await fetchWorkbenchStatus();
-    setCachedImageConversationStorageMode(
-      config.storage.imageConversationStorage === "server"
-        ? "server"
-        : "browser",
-    );
-    return cachedImageConversationStorageMode;
-  } catch (error) {
-    if (cachedImageConversationStorageMode) {
-      return cachedImageConversationStorageMode;
-    }
-    throw error instanceof Error
-      ? error
-      : new Error("无法确定会话记录存储模式");
-  }
+  cachedImageConversationStorageMode = "server";
+  return "server";
 }
 
 async function listServerImageConversations(): Promise<ImageConversation[]> {

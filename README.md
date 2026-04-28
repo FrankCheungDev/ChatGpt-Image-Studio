@@ -37,7 +37,7 @@ ChatGpt Image Studio 是一个单服务交付的图片工作流项目：
   - 作为后续编辑源图继续改图
   - 打开选区编辑器进行局部重绘
 - 用户消息支持一键复制，失败任务支持原位重试
-- 历史记录支持浏览器本地存储或服务端持久化
+- 历史记录由服务端接口提供，并按登录用户隔离
 
 ## 数据存储
 
@@ -45,15 +45,16 @@ ChatGpt Image Studio 是一个单服务交付的图片工作流项目：
 
 - 账号池存储：`current / sqlite / redis`
 - 配置文件存储：`file / redis`
-- 图片会话记录：`browser / server`
-- 图片数据：`browser / server`
+- 图片会话记录：服务端存储
+- 图片数据：服务端存储
 
 说明：
 
 - `current` 表示沿用当前本地文件目录方案
-- `server` 表示由后端统一保存并对外提供图片 / 会话读取
-- 设置页支持迁移账号池、配置文件与图片会话历史
-- 无盘容器场景可配合 `redis` 保存配置与账号池
+- 图片历史会写入后端存储，并由服务端按当前用户过滤
+- 管理员可通过平台历史查看所有用户记录
+- 云端部署建议挂载 `./backend/data:/app/data`，保存 SQLite 数据库和图片文件
+- 无盘容器场景可配合 `redis` 保存配置与账号池，但图片文件仍需要持久化目录
 
 ## 账号池与同步
 
@@ -240,8 +241,8 @@ docker run -d \
   -e REDIS_PASSWORD=your-redis-password \
   -e REDIS_DB=0 \
   -e REDIS_PREFIX=chatgpt2api:studio \
-  -e STORAGE_IMAGE_CONVERSATION_STORAGE=browser \
-  -e STORAGE_IMAGE_DATA_STORAGE=browser \
+  -e STORAGE_IMAGE_CONVERSATION_STORAGE=server \
+  -e STORAGE_IMAGE_DATA_STORAGE=server \
   -e TZ=Asia/Shanghai \
   ghcr.io/peiyizhi0724/chatgpt-image-studio:latest
 ```
@@ -250,7 +251,7 @@ docker run -d \
 
 - 这组环境变量的作用是让程序每次启动时都能先从 Redis 读取配置引导。
 - 启动成功后，管理员可在用户管理页创建普通用户。
-- 如果没有持久化磁盘，不建议把 `image_conversation_storage` 或 `image_data_storage` 设为 `server`，否则服务端图片历史和图片文件在容器重建后仍会丢失。
+- 图片历史不再使用浏览器本地存储；如果容器没有持久化磁盘，历史元数据可以放在 Redis，但图片文件仍需要挂载持久化目录。
 
 ### 一键更新
 
@@ -346,7 +347,7 @@ paid_image_model = "gpt-5.4-mini"
 - `paid_image_model`
   控制 `Plus / Pro / Team` 账号真正发给上游的模型名。
 
-如果需要把账号池与图片历史迁移到数据库或服务端模式，可在 `[storage]` 下补充：
+图片历史默认走服务端接口并按用户隔离。云端部署建议在 `[storage]` 下使用 SQLite 与服务端图片存储：
 
 ```toml
 [storage]
@@ -367,14 +368,6 @@ redis_addr = "127.0.0.1:6379"
 redis_password = ""
 redis_db = 0
 redis_prefix = "chatgpt2api:studio"
-```
-
-对于无状态云容器，通常建议同时配合：
-
-```toml
-[storage]
-image_conversation_storage = "browser"
-image_data_storage = "browser"
 ```
 
 ## 构建
