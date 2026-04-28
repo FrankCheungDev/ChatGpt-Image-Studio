@@ -137,6 +137,53 @@ func TestCPAImageClientEditUsesCodexResponsesMaskField(t *testing.T) {
 	}
 }
 
+func TestCPAImageClientEditUsesImageMIMEDataURLsForCodexResponses(t *testing.T) {
+	var seenPayload map[string]any
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/responses" {
+			t.Fatalf("path = %q, want %q", r.URL.Path, "/v1/responses")
+		}
+
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		if err := json.Unmarshal(body, &seenPayload); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		encoded := base64.StdEncoding.EncodeToString([]byte("image"))
+		_, _ = io.WriteString(w, `data: {"type":"response.completed","response":{"created_at":1,"output":[{"type":"image_generation_call","result":"`+encoded+`","output_format":"png"}]}}`+"\n\n")
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+	}))
+	defer server.Close()
+
+	client := newCPAImageClient(server.URL, "test-key", 30*time.Second, "codex_responses")
+	_, err := client.EditImageByUpload(context.Background(), "edit cat", cpaFixedImageModel, [][]byte{[]byte("source-image")}, []byte("mask-image"), "1536x1024", "high")
+	if err != nil {
+		t.Fatalf("EditImageByUpload() returned error: %v", err)
+	}
+
+	input := seenPayload["input"].([]any)
+	message := input[0].(map[string]any)
+	content := message["content"].([]any)
+	imagePart := content[1].(map[string]any)
+	imageURL := imagePart["image_url"].(string)
+	if !strings.HasPrefix(imageURL, "data:image/") {
+		t.Fatalf("input image_url = %q, want image MIME data URL", imageURL)
+	}
+
+	tools := seenPayload["tools"].([]any)
+	tool := tools[0].(map[string]any)
+	maskField := tool["input_image_mask"].(map[string]any)
+	maskURL := maskField["image_url"].(string)
+	if !strings.HasPrefix(maskURL, "data:image/") {
+		t.Fatalf("mask image_url = %q, want image MIME data URL", maskURL)
+	}
+}
+
 func TestCPAImageClientAutoFallsBackToCodexResponses(t *testing.T) {
 	var imagesAPICalls int
 	var responsesCalls int
@@ -164,6 +211,45 @@ func TestCPAImageClientAutoFallsBackToCodexResponses(t *testing.T) {
 	results, err := client.GenerateImage(context.Background(), "draw a cat", cpaFixedImageModel, 1, "1024x1024", "", "")
 	if err != nil {
 		t.Fatalf("GenerateImage() returned error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("len(results) = %d, want 1", len(results))
+	}
+	if imagesAPICalls != 1 || responsesCalls != 1 {
+		t.Fatalf("images_api calls = %d, responses calls = %d, want 1/1", imagesAPICalls, responsesCalls)
+	}
+	if got := client.LastRoute(); got != "codex_responses" {
+		t.Fatalf("LastRoute() = %q, want %q", got, "codex_responses")
+	}
+}
+
+func TestCPAImageClientImagesAPIEditFallsBackOnUnsupportedImageDataURLMIME(t *testing.T) {
+	var imagesAPICalls int
+	var responsesCalls int
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/images/edits":
+			imagesAPICalls++
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = io.WriteString(w, `{"error":{"message":"Invalid 'input[0].content[1].image_url'. Expected a base64-encoded data URL with an image MIME type (e.g. 'data:image/png;base64,aW1nIGJ5dGVzIGhlcmU='), but got unsupported MIME type 'application/octet-stream'."}}`)
+		case "/v1/responses":
+			responsesCalls++
+			w.Header().Set("Content-Type", "text/event-stream")
+			encoded := base64.StdEncoding.EncodeToString([]byte("image"))
+			_, _ = io.WriteString(w, `data: {"type":"response.completed","response":{"created_at":1,"output":[{"type":"image_generation_call","result":"`+encoded+`","output_format":"png"}]}}`+"\n\n")
+			_, _ = io.WriteString(w, "data: [DONE]\n\n")
+		default:
+			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	client := newCPAImageClient(server.URL, "test-key", 30*time.Second, "images_api")
+	results, err := client.EditImageByUpload(context.Background(), "edit cat", cpaFixedImageModel, [][]byte{[]byte("source-image")}, []byte("mask-image"), "1024x1024", "")
+	if err != nil {
+		t.Fatalf("EditImageByUpload() returned error: %v", err)
 	}
 	if len(results) != 1 {
 		t.Fatalf("len(results) = %d, want 1", len(results))

@@ -330,15 +330,19 @@ func detectCPAImageMIME(data []byte) string {
 	if len(data) == 0 {
 		return "image/png"
 	}
-	return http.DetectContentType(data)
+	return normalizeCPAImageMIMEType(http.DetectContentType(data))
 }
 
 func encodeCPAImageDataURLFromBase64(encoded, mimeType string) string {
-	trimmedMimeType := strings.TrimSpace(mimeType)
-	if trimmedMimeType == "" {
-		trimmedMimeType = "image/png"
+	return "data:" + normalizeCPAImageMIMEType(mimeType) + ";base64," + strings.TrimSpace(encoded)
+}
+
+func normalizeCPAImageMIMEType(mimeType string) string {
+	mediaType := strings.ToLower(strings.TrimSpace(strings.Split(strings.TrimSpace(mimeType), ";")[0]))
+	if strings.HasPrefix(mediaType, "image/") {
+		return mediaType
 	}
-	return "data:" + trimmedMimeType + ";base64," + strings.TrimSpace(encoded)
+	return "image/png"
 }
 
 func decodeCPAImageDataURL(value string) ([]byte, error) {
@@ -375,12 +379,18 @@ func (c *cpaImageClient) shouldUseResponsesRoute() bool {
 }
 
 func (c *cpaImageClient) shouldFallbackToResponses(err error) bool {
-	if c == nil || c.routeStrategy != "auto" || err == nil {
+	if c == nil || err == nil {
 		return false
 	}
 
 	message := strings.ToLower(strings.TrimSpace(err.Error()))
 	if message == "" {
+		return false
+	}
+	if isCPAUnsupportedImageMIMEDataURLError(message) {
+		return true
+	}
+	if c.routeStrategy != "auto" {
 		return false
 	}
 
@@ -396,6 +406,13 @@ func (c *cpaImageClient) shouldFallbackToResponses(err error) bool {
 		}
 	}
 	return false
+}
+
+func isCPAUnsupportedImageMIMEDataURLError(message string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(message))
+	return strings.Contains(normalized, "image_url") &&
+		strings.Contains(normalized, "unsupported mime type") &&
+		strings.Contains(normalized, "expected a base64-encoded data url with an image mime type")
 }
 
 func (c *cpaImageClient) generateViaResponses(ctx context.Context, prompt, size, quality, background string) ([]handler.ImageResult, error) {
