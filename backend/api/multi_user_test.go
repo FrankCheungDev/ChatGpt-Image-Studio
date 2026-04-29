@@ -552,17 +552,27 @@ func TestImageConversationsAreScopedToCurrentUser(t *testing.T) {
 		t.Fatalf("admin platform history status = %d, body = %s", rec.Code, rec.Body.String())
 	}
 	var adminPayload struct {
-		Items []imagehistory.Conversation `json:"items"`
+		Items []struct {
+			imagehistory.Conversation
+			UserName string `json:"userName"`
+		} `json:"items"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &adminPayload); err != nil {
 		t.Fatalf("Unmarshal(admin list) returned error: %v", err)
 	}
-	seen := map[string]string{}
+	seen := map[string]struct {
+		userID   string
+		userName string
+	}{}
 	for _, item := range adminPayload.Items {
-		seen[item.ID] = item.UserID
+		seen[item.ID] = struct {
+			userID   string
+			userName string
+		}{item.UserID, item.UserName}
 	}
-	if seen["alice-conv"] != alice.ID || seen["bob-conv"] != bob.ID {
-		t.Fatalf("admin platform history = %#v, want both user-owned histories", adminPayload.Items)
+	if seen["alice-conv"].userID != alice.ID || seen["alice-conv"].userName != alice.Username ||
+		seen["bob-conv"].userID != bob.ID || seen["bob-conv"].userName != bob.Username {
+		t.Fatalf("admin platform history = %#v, want both user-owned histories with usernames", adminPayload.Items)
 	}
 
 	rec = doJSON(t, server, http.MethodGet, "/api/admin/image/conversations/bob-conv", adminCookie, nil)
@@ -570,13 +580,16 @@ func TestImageConversationsAreScopedToCurrentUser(t *testing.T) {
 		t.Fatalf("admin platform history detail status = %d, body = %s", rec.Code, rec.Body.String())
 	}
 	var detailPayload struct {
-		Item imagehistory.Conversation `json:"item"`
+		Item struct {
+			imagehistory.Conversation
+			UserName string `json:"userName"`
+		} `json:"item"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &detailPayload); err != nil {
 		t.Fatalf("Unmarshal(admin detail) returned error: %v", err)
 	}
-	if detailPayload.Item.ID != "bob-conv" || detailPayload.Item.UserID != bob.ID {
-		t.Fatalf("admin platform detail = %#v, want bob-conv owned by bob", detailPayload.Item)
+	if detailPayload.Item.ID != "bob-conv" || detailPayload.Item.UserID != bob.ID || detailPayload.Item.UserName != bob.Username {
+		t.Fatalf("admin platform detail = %#v, want bob-conv owned by bob with username", detailPayload.Item)
 	}
 
 	rec = doJSON(t, server, http.MethodGet, "/api/admin/image/conversations/bob-conv", bobCookie, nil)

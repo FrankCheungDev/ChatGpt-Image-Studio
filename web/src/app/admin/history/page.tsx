@@ -106,6 +106,17 @@ function formatSizeLabel(value?: string) {
     .replace("x", "X");
 }
 
+function formatUserLabel(item: ImageConversation) {
+  return item.userName || item.userId || "-";
+}
+
+function formatUserTitle(item: ImageConversation) {
+  if (item.userName && item.userId) {
+    return `${item.userName} (${item.userId})`;
+  }
+  return formatUserLabel(item);
+}
+
 function buildDownloadName(createdAt: string, turnId: string, index: number) {
   const date = new Date(createdAt);
   const safeIndex = String(index + 1).padStart(2, "0");
@@ -254,7 +265,7 @@ function ConversationDetail({ item }: { item: ImageConversation }) {
   return (
     <div className="space-y-5">
       <div className="grid gap-3 rounded-2xl border border-stone-200 bg-stone-50 p-3 sm:grid-cols-2 lg:grid-cols-4">
-        <DetailMeta label="用户 ID" value={item.userId} />
+        <DetailMeta label="用户" value={formatUserLabel(item)} />
         <DetailMeta label="创建时间" value={formatDateTime(item.createdAt)} />
         <DetailMeta label="会话 ID" value={item.id} />
         <div className="rounded-xl border border-stone-200 bg-white px-3 py-2">
@@ -437,8 +448,8 @@ export default function PlatformHistoryPage() {
                           <div className="truncate font-medium text-stone-900">{item.title || item.prompt || item.id}</div>
                           <div className="mt-1 line-clamp-2 text-xs leading-5 text-stone-500">{item.prompt || "-"}</div>
                         </div>
-                        <div className="truncate text-xs text-stone-500" title={String(item.userId || "")}>
-                          {item.userId || "-"}
+                        <div className="truncate text-xs text-stone-500" title={formatUserTitle(item)}>
+                          {formatUserLabel(item)}
                         </div>
                         <Badge variant={statusVariant(item.status)} className="w-fit rounded-md px-2 py-1">
                           {formatStatusLabel(item.status)}
@@ -487,7 +498,7 @@ export default function PlatformHistoryPage() {
             </DialogTitle>
             <DialogDescription className="truncate">
               {selectedConversation
-                ? `${selectedConversation.userId || "-"} · ${formatDateTime(selectedConversation.createdAt)}`
+                ? `${formatUserLabel(selectedConversation)} · ${formatDateTime(selectedConversation.createdAt)}`
                 : selectedId || "正在读取"}
             </DialogDescription>
           </DialogHeader>

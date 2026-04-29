@@ -9,6 +9,11 @@ import (
 	"chatgpt2api/internal/imagehistory"
 )
 
+type adminImageConversation struct {
+	imagehistory.Conversation
+	UserName string `json:"userName,omitempty"`
+}
+
 func (s *Server) handleListImageConversations(w http.ResponseWriter, r *http.Request) {
 	if !s.serverImageConversationStorageEnabled() {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "server image storage is disabled"})
@@ -51,7 +56,12 @@ func (s *Server) handleListAllImageConversations(w http.ResponseWriter, r *http.
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+	userNames, err := s.imageHistoryUserNamesByID()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": adminImageConversations(items, userNames)})
 }
 
 func (s *Server) handleGetAnyImageConversation(w http.ResponseWriter, r *http.Request) {
@@ -75,7 +85,12 @@ func (s *Server) handleGetAnyImageConversation(w http.ResponseWriter, r *http.Re
 		writeJSON(w, http.StatusNotFound, map[string]any{"error": "conversation not found"})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"item": item})
+	userNames, err := s.imageHistoryUserNamesByID()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"item": adminImageConversationFor(*item, userNames)})
 }
 
 func (s *Server) handleGetImageConversation(w http.ResponseWriter, r *http.Request) {
@@ -276,4 +291,36 @@ func filterImageConversationsByUser(items []imagehistory.Conversation, userID st
 		}
 	}
 	return filtered
+}
+
+func (s *Server) imageHistoryUserNamesByID() (map[string]string, error) {
+	userNames := map[string]string{
+		legacyAdminUserID: "legacy-admin",
+	}
+	if s.userStore == nil {
+		return userNames, nil
+	}
+	items, err := s.userStore.ListUsers()
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range items {
+		userNames[item.ID] = item.Username
+	}
+	return userNames, nil
+}
+
+func adminImageConversations(items []imagehistory.Conversation, userNames map[string]string) []adminImageConversation {
+	enriched := make([]adminImageConversation, 0, len(items))
+	for _, item := range items {
+		enriched = append(enriched, adminImageConversationFor(item, userNames))
+	}
+	return enriched
+}
+
+func adminImageConversationFor(item imagehistory.Conversation, userNames map[string]string) adminImageConversation {
+	return adminImageConversation{
+		Conversation: item,
+		UserName:     userNames[item.UserID],
+	}
 }

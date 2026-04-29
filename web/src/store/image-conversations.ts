@@ -52,6 +52,7 @@ export type ImageConversationTurn = {
 export type ImageConversation = {
   id: string;
   userId?: string;
+  userName?: string;
   title: string;
   mode: ImageMode;
   prompt: string;
