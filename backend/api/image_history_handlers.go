@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"chatgpt2api/internal/config"
 	"chatgpt2api/internal/imagehistory"
@@ -123,6 +124,10 @@ func (s *Server) handleGetImageConversation(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusNotFound, map[string]any{"error": "conversation not found"})
 		return
 	}
+	if item.DeletedAt != "" {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "conversation not found"})
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"item": item})
 }
 
@@ -145,6 +150,7 @@ func (s *Server) handleSaveImageConversation(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	body.UserID = user.ID
+	body.DeletedAt = ""
 
 	store, err := imagehistory.NewStore(s.cfg)
 	if err != nil {
@@ -187,7 +193,7 @@ func (s *Server) handleDeleteImageConversation(w http.ResponseWriter, r *http.Re
 		writeJSON(w, http.StatusNotFound, map[string]any{"error": "conversation not found"})
 		return
 	}
-	if err := store.Delete(r.Context(), r.PathValue("id")); err != nil {
+	if _, err := store.MarkDeleted(r.Context(), r.PathValue("id"), time.Now()); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
@@ -217,10 +223,10 @@ func (s *Server) handleClearImageConversations(w http.ResponseWriter, r *http.Re
 		return
 	}
 	for _, item := range items {
-		if item.UserID != user.ID {
+		if item.UserID != user.ID || item.DeletedAt != "" {
 			continue
 		}
-		if err := store.Delete(r.Context(), item.ID); err != nil {
+		if _, err := store.MarkDeleted(r.Context(), item.ID, time.Now()); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 			return
 		}
@@ -286,7 +292,7 @@ func (s *Server) serverImageConversationStorageEnabled() bool {
 func filterImageConversationsByUser(items []imagehistory.Conversation, userID string) []imagehistory.Conversation {
 	filtered := make([]imagehistory.Conversation, 0, len(items))
 	for _, item := range items {
-		if item.UserID == userID {
+		if item.UserID == userID && item.DeletedAt == "" {
 			filtered = append(filtered, item)
 		}
 	}

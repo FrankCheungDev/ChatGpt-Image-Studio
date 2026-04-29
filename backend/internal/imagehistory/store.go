@@ -68,6 +68,7 @@ type Turn struct {
 type Conversation struct {
 	ID           string        `json:"id"`
 	UserID       string        `json:"userId,omitempty"`
+	DeletedAt    string        `json:"deletedAt,omitempty"`
 	Title        string        `json:"title"`
 	Mode         string        `json:"mode"`
 	Prompt       string        `json:"prompt"`
@@ -157,6 +158,20 @@ func (s *Store) Save(ctx context.Context, conversation Conversation) (*Conversat
 		return nil, err
 	}
 	return &normalized, nil
+}
+
+func (s *Store) MarkDeleted(ctx context.Context, id string, deletedAt time.Time) (*Conversation, error) {
+	current, err := s.backend.Get(ctx, cleanID(id))
+	if err != nil || current == nil {
+		return current, err
+	}
+	if current.DeletedAt == "" {
+		current.DeletedAt = deletedAt.UTC().Format(time.RFC3339Nano)
+	}
+	if err := s.backend.Save(ctx, *current); err != nil {
+		return nil, err
+	}
+	return current, nil
 }
 
 func (s *Store) Delete(ctx context.Context, id string) error {

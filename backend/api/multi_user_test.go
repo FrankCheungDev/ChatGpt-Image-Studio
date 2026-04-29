@@ -597,3 +597,173 @@ func TestImageConversationsAreScopedToCurrentUser(t *testing.T) {
 		t.Fatalf("ordinary user platform history detail status = %d, want 403", rec.Code)
 	}
 }
+
+func TestDeletingWorkbenchImageConversationKeepsPlatformHistory(t *testing.T) {
+	server, _, _, alice := newMultiUserTestServer(t)
+	aliceCookie := loginCookie(t, server, "alice", "alice-pass")
+	adminCookie := loginCookie(t, server, "admin", "admin-pass")
+
+	conversation := imagehistory.Conversation{
+		ID:        "alice-conv",
+		UserID:    "ignored-client-user",
+		Title:     "生成",
+		Mode:      "generate",
+		Prompt:    "keep platform history",
+		Model:     "gpt-image-2",
+		Count:     1,
+		CreatedAt: "2026-04-26T00:00:00Z",
+		Status:    "success",
+		Turns: []imagehistory.Turn{{
+			ID:        "alice-conv-turn",
+			Title:     "生成",
+			Mode:      "generate",
+			Prompt:    "keep platform history",
+			Model:     "gpt-image-2",
+			Count:     1,
+			CreatedAt: "2026-04-26T00:00:00Z",
+			Status:    "success",
+		}},
+	}
+	rec := doJSON(t, server, http.MethodPut, "/api/image/conversations/alice-conv", aliceCookie, conversation)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("save status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+
+	rec = doJSON(t, server, http.MethodDelete, "/api/image/conversations/alice-conv", aliceCookie, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("delete status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+
+	rec = doJSON(t, server, http.MethodGet, "/api/image/conversations", aliceCookie, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("workbench list status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var workbenchPayload struct {
+		Items []imagehistory.Conversation `json:"items"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &workbenchPayload); err != nil {
+		t.Fatalf("Unmarshal(workbench list) returned error: %v", err)
+	}
+	if len(workbenchPayload.Items) != 0 {
+		t.Fatalf("workbench list after delete = %#v, want empty", workbenchPayload.Items)
+	}
+
+	rec = doJSON(t, server, http.MethodGet, "/api/admin/image/conversations/alice-conv", adminCookie, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("admin detail after workbench delete status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var detailPayload struct {
+		Item struct {
+			imagehistory.Conversation
+			UserName  string `json:"userName"`
+			DeletedAt string `json:"deletedAt"`
+		} `json:"item"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &detailPayload); err != nil {
+		t.Fatalf("Unmarshal(admin detail) returned error: %v", err)
+	}
+	if detailPayload.Item.ID != "alice-conv" || detailPayload.Item.UserID != alice.ID || detailPayload.Item.UserName != alice.Username {
+		t.Fatalf("admin detail after workbench delete = %#v, want retained alice history", detailPayload.Item)
+	}
+	if detailPayload.Item.DeletedAt == "" {
+		t.Fatalf("admin detail DeletedAt is empty, want workbench deletion marker")
+	}
+}
+
+func TestClearingWorkbenchImageConversationsKeepsPlatformHistory(t *testing.T) {
+	server, userStore, _, alice := newMultiUserTestServer(t)
+	bob, err := userStore.CreateUser(users.CreateUserInput{
+		Username: "bob",
+		Password: "bob-pass",
+		Role:     users.RoleUser,
+	})
+	if err != nil {
+		t.Fatalf("CreateUser(bob) returned error: %v", err)
+	}
+	aliceCookie := loginCookie(t, server, "alice", "alice-pass")
+	bobCookie := loginCookie(t, server, "bob", "bob-pass")
+	adminCookie := loginCookie(t, server, "admin", "admin-pass")
+
+	conversationBody := func(id string) imagehistory.Conversation {
+		return imagehistory.Conversation{
+			ID:        id,
+			Title:     "生成",
+			Mode:      "generate",
+			Prompt:    id,
+			Model:     "gpt-image-2",
+			Count:     1,
+			CreatedAt: "2026-04-26T00:00:00Z",
+			Status:    "success",
+			Turns: []imagehistory.Turn{{
+				ID:        id + "-turn",
+				Title:     "生成",
+				Mode:      "generate",
+				Prompt:    id,
+				Model:     "gpt-image-2",
+				Count:     1,
+				CreatedAt: "2026-04-26T00:00:00Z",
+				Status:    "success",
+			}},
+		}
+	}
+	rec := doJSON(t, server, http.MethodPut, "/api/image/conversations/alice-conv", aliceCookie, conversationBody("alice-conv"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("alice save status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	rec = doJSON(t, server, http.MethodPut, "/api/image/conversations/bob-conv", bobCookie, conversationBody("bob-conv"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("bob save status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+
+	rec = doJSON(t, server, http.MethodDelete, "/api/image/conversations", aliceCookie, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("alice clear status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+
+	rec = doJSON(t, server, http.MethodGet, "/api/image/conversations", aliceCookie, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("alice workbench list status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var aliceWorkbench struct {
+		Items []imagehistory.Conversation `json:"items"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &aliceWorkbench); err != nil {
+		t.Fatalf("Unmarshal(alice workbench list) returned error: %v", err)
+	}
+	if len(aliceWorkbench.Items) != 0 {
+		t.Fatalf("alice workbench list after clear = %#v, want empty", aliceWorkbench.Items)
+	}
+
+	rec = doJSON(t, server, http.MethodGet, "/api/admin/image/conversations", adminCookie, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("admin list after clear status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var adminPayload struct {
+		Items []struct {
+			imagehistory.Conversation
+			UserName  string `json:"userName"`
+			DeletedAt string `json:"deletedAt"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &adminPayload); err != nil {
+		t.Fatalf("Unmarshal(admin list) returned error: %v", err)
+	}
+	seen := map[string]struct {
+		userID    string
+		userName  string
+		deletedAt string
+	}{}
+	for _, item := range adminPayload.Items {
+		seen[item.ID] = struct {
+			userID    string
+			userName  string
+			deletedAt string
+		}{item.UserID, item.UserName, item.DeletedAt}
+	}
+	if seen["alice-conv"].userID != alice.ID || seen["alice-conv"].userName != alice.Username || seen["alice-conv"].deletedAt == "" {
+		t.Fatalf("admin alice history after clear = %#v, want retained deleted alice history", seen["alice-conv"])
+	}
+	if seen["bob-conv"].userID != bob.ID || seen["bob-conv"].userName != bob.Username || seen["bob-conv"].deletedAt != "" {
+		t.Fatalf("admin bob history after alice clear = %#v, want retained active bob history", seen["bob-conv"])
+	}
+}

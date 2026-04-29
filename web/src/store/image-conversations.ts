@@ -53,6 +53,7 @@ export type ImageConversation = {
   id: string;
   userId?: string;
   userName?: string;
+  deletedAt?: string;
   title: string;
   mode: ImageMode;
   prompt: string;
