@@ -4,18 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ChevronLeft, History, ImageIcon, LogOut, PanelLeftClose, PanelLeftOpen, Sparkles, Users } from "lucide-react";
 
-import { fetchCurrentUser, fetchVersionInfo, logout, type User } from "@/lib/api";
+import { fetchCurrentUser, logout, type User } from "@/lib/api";
 import { clearStoredAuthKey, setStoredUser } from "@/store/auth";
 import { cn } from "@/lib/utils";
-
-const repositoryUrl = "https://github.com/peiyizhi0724/ChatGpt-Image-Studio";
-
-function formatVersionLabel(value: string) {
-  const normalized = String(value || "")
-    .trim()
-    .replace(/^v+/i, "");
-  return normalized ? `v${normalized}` : "读取中";
-}
 
 const imageNavItem = {
   href: "/image/history",
@@ -65,12 +56,12 @@ function isNavItemActive(pathname: string, href: string, matchPrefix?: string) {
 type DesktopTopNavProps = {
   pathname: string;
   defaultCollapsed: boolean;
-  versionLabel: string;
+  usernameLabel: string;
   navItems: NavItem[];
   onLogout: () => Promise<void>;
 };
 
-function DesktopTopNav({ pathname, defaultCollapsed, versionLabel, navItems, onLogout }: DesktopTopNavProps) {
+function DesktopTopNav({ pathname, defaultCollapsed, usernameLabel, navItems, onLogout }: DesktopTopNavProps) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
   return (
@@ -146,19 +137,16 @@ function DesktopTopNav({ pathname, defaultCollapsed, versionLabel, navItems, onL
         </nav>
 
         <div className="mt-auto space-y-3">
-          <a
-            href={repositoryUrl}
-            target="_blank"
-            rel="noreferrer"
+          <div
             className={cn(
-              "block rounded-2xl bg-white/70 text-xs text-stone-500 shadow-sm transition hover:bg-white hover:text-stone-700",
+              "block rounded-2xl bg-white/70 text-xs text-stone-500 shadow-sm",
               collapsed ? "px-2 py-3 text-center" : "px-4 py-3",
             )}
-            title="打开 GitHub 仓库"
+            title={usernameLabel}
           >
-            {!collapsed ? <div className="font-medium text-stone-700">版本</div> : null}
-            <div className={cn(!collapsed ? "mt-1" : "font-medium")}>{versionLabel}</div>
-          </a>
+            {!collapsed ? <div className="font-medium text-stone-700">当前用户</div> : null}
+            <div className={cn("truncate", !collapsed ? "mt-1" : "font-medium")}>{usernameLabel}</div>
+          </div>
           <button
             type="button"
             className={cn(
@@ -182,40 +170,18 @@ export function TopNav() {
   const navigate = useNavigate();
   const isImageRoute = pathname === "/image" || pathname?.startsWith("/image/");
   const isMobileWorkspaceRoute = pathname === "/image/workspace";
-  const [versionLabel, setVersionLabel] = useState("读取中");
   const [mobileNavExpanded, setMobileNavExpanded] = useState(false);
   const [mobileHeaderHeight, setMobileHeaderHeight] = useState(0);
   const [mobileWorkspaceHeaderHeight, setMobileWorkspaceHeaderHeight] = useState(0);
   const [mobileWorkspaceTitle, setMobileWorkspaceTitle] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const usernameLabel = currentUser?.username?.trim() || "未登录";
   const visibleNavItems = currentUser?.role === "admin" ? [...adminNavItems] : userNavItems;
   const mobileHeaderRef = useRef<HTMLElement | null>(null);
   const mobileWorkspaceHeaderRef = useRef<HTMLDivElement | null>(null);
   const setMobileHeaderRef = (node: HTMLElement | null) => {
     mobileHeaderRef.current = node;
   };
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadVersion = async () => {
-      try {
-        const payload = await fetchVersionInfo();
-        if (!cancelled) {
-          setVersionLabel(formatVersionLabel(payload.version));
-        }
-      } catch {
-        if (!cancelled) {
-          setVersionLabel("未知版本");
-        }
-      }
-    };
-
-    void loadVersion();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     setMobileNavExpanded(false);
@@ -499,7 +465,7 @@ export function TopNav() {
         key={isImageRoute ? "image-route" : "non-image-route"}
         pathname={pathname}
         defaultCollapsed={isImageRoute}
-        versionLabel={versionLabel}
+        usernameLabel={usernameLabel}
         navItems={visibleNavItems}
         onLogout={handleLogout}
       />
