@@ -191,7 +191,7 @@ export function PromptComposer({
           <div className="hide-scrollbar -mx-1 flex items-center gap-1.5 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:gap-2 sm:overflow-visible sm:px-0 sm:pb-0">
             {showImageOutputControls ? (
               <Select value={imageAspectRatio} onValueChange={onImageAspectRatioChange}>
-                <SelectTrigger className="h-9 w-[84px] shrink-0 rounded-full border-stone-200 bg-white text-[13px] font-medium text-stone-700 shadow-none focus-visible:ring-0 sm:h-10 sm:w-[108px] sm:text-sm">
+                <SelectTrigger className="h-9 w-[120px] shrink-0 rounded-full border-stone-200 bg-white text-[13px] font-medium text-stone-700 shadow-none focus-visible:ring-0 sm:h-10 sm:w-[136px] sm:text-sm">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

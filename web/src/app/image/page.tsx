@@ -33,7 +33,16 @@ import { useImageSourceInputs } from "./hooks/use-image-source-inputs";
 import { useImageSubmit } from "./hooks/use-image-submit";
 import { buildConversationPreviewSource } from "./view-utils";
 
-type ImageAspectRatio = "1:1" | "4:3" | "3:2" | "16:9" | "21:9" | "9:16";
+type ImageAspectRatio =
+  | "1:1"
+  | "4:3"
+  | "3:4"
+  | "3:2"
+  | "2:3"
+  | "16:9"
+  | "9:16"
+  | "21:9"
+  | "9:21";
 type ImageResolutionTier = "sd" | "2k" | "4k";
 type ImageResolutionAccess = "free" | "paid";
 type ImageResolutionPreset = {
@@ -47,12 +56,15 @@ const imageAspectRatioOptions: Array<{
   label: string;
   value: ImageAspectRatio;
 }> = [
-  { label: "1:1", value: "1:1" },
-  { label: "4:3", value: "4:3" },
-  { label: "3:2", value: "3:2" },
-  { label: "16:9", value: "16:9" },
-  { label: "21:9", value: "21:9" },
-  { label: "9:16", value: "9:16" },
+  { label: "1:1（方形）", value: "1:1" },
+  { label: "4:3（横向）", value: "4:3" },
+  { label: "3:4（纵向）", value: "3:4" },
+  { label: "3:2（横向）", value: "3:2" },
+  { label: "2:3（纵向）", value: "2:3" },
+  { label: "16:9（横向）", value: "16:9" },
+  { label: "9:16（纵向）", value: "9:16" },
+  { label: "21:9（横向）", value: "21:9" },
+  { label: "9:21（纵向）", value: "9:21" },
 ];
 
 const imageResolutionPresets: Record<
@@ -74,25 +86,40 @@ const imageResolutionPresets: Record<
     { tier: "2k", label: "Paid 2K", value: "2048x1536", access: "paid" },
     { tier: "4k", label: "Paid 高像素", value: "3264x2448", access: "paid" },
   ],
+  "3:4": [
+    { tier: "sd", label: "Free 实际档", value: "1072x1440", access: "free" },
+    { tier: "2k", label: "Paid 2K", value: "1536x2048", access: "paid" },
+    { tier: "4k", label: "Paid 高像素", value: "2448x3264", access: "paid" },
+  ],
   "3:2": [
     { tier: "sd", label: "Free 实际档", value: "1536x1024", access: "free" },
     { tier: "2k", label: "Paid 2K", value: "2160x1440", access: "paid" },
     { tier: "4k", label: "Paid 高像素", value: "3456x2304", access: "paid" },
+  ],
+  "2:3": [
+    { tier: "sd", label: "Free 实际档", value: "1024x1536", access: "free" },
+    { tier: "2k", label: "Paid 2K", value: "1440x2160", access: "paid" },
+    { tier: "4k", label: "Paid 高像素", value: "2304x3456", access: "paid" },
   ],
   "16:9": [
     { tier: "sd", label: "Free 实际档", value: "1664x928", access: "free" },
     { tier: "2k", label: "Paid 2K", value: "2560x1440", access: "paid" },
     { tier: "4k", label: "Paid 4K", value: "3840x2160", access: "paid" },
   ],
+  "9:16": [
+    { tier: "sd", label: "Free 实际档", value: "928x1664", access: "free" },
+    { tier: "2k", label: "Paid 2K", value: "1440x2560", access: "paid" },
+    { tier: "4k", label: "Paid 4K", value: "2160x3840", access: "paid" },
+  ],
   "21:9": [
     { tier: "sd", label: "Free 实际档", value: "1904x816", access: "free" },
     { tier: "2k", label: "Paid 2K", value: "3360x1440", access: "paid" },
     { tier: "4k", label: "Paid 高像素", value: "3808x1632", access: "paid" },
   ],
-  "9:16": [
-    { tier: "sd", label: "Free 实际档", value: "928x1664", access: "free" },
-    { tier: "2k", label: "Paid 2K", value: "1440x2560", access: "paid" },
-    { tier: "4k", label: "Paid 4K", value: "2160x3840", access: "paid" },
+  "9:21": [
+    { tier: "sd", label: "Free 实际档", value: "816x1904", access: "free" },
+    { tier: "2k", label: "Paid 2K", value: "1440x3360", access: "paid" },
+    { tier: "4k", label: "Paid 高像素", value: "1632x3808", access: "paid" },
   ],
 };
 
@@ -295,7 +322,7 @@ function buildProcessingStatus(
     }
     return {
       title: "模型正在生成图片",
-      detail: "通常需要 20 到 90 秒，请保持页面开启",
+      detail: "通常需要 1-5 分钟，请保持页面开启",
     };
   }
 
@@ -323,13 +350,13 @@ function buildProcessingStatus(
         variant === "selection-edit"
           ? "模型正在按选区修改图片"
           : "模型正在编辑图片",
-      detail: "通常需要 20 到 90 秒，请保持页面开启",
+      detail: "通常需要 1-5 分钟，请保持页面开启",
     };
   }
 
   return {
     title: "模型正在编辑图片",
-    detail: "通常需要 20 到 90 秒，请保持页面开启",
+    detail: "通常需要 1-5 分钟，请保持页面开启",
   };
 }
 
